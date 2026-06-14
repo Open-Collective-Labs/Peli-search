@@ -1,0 +1,27 @@
+use std::fmt;
+
+/// Errors that can occur during search engine operations.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SearchError {
+    /// The document ID is empty or contains invalid characters.
+    InvalidDocumentId(String),
+    /// A document with the given ID already exists.
+    DocumentAlreadyExists(String),
+    /// No document was found with the given ID.
+    DocumentNotFound(String),
+    /// An internal error occurred.
+    Internal(String),
+}
+
+impl fmt::Display for SearchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidDocumentId(id) => write!(f, "invalid document ID: {id}"),
+            Self::DocumentAlreadyExists(id) => write!(f, "document '{id}' already exists"),
+            Self::DocumentNotFound(id) => write!(f, "document '{id}' not found"),
+            Self::Internal(msg) => write!(f, "internal error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for SearchError {}
