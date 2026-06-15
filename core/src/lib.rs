@@ -1,3 +1,4 @@
+pub mod aggregation;
 pub mod document;
 pub mod engine;
 pub mod error;
