@@ -1,3 +1,5 @@
+use crate::ranking::explanation::ScoreExplanation;
+
 /// A single search result entry.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
@@ -23,6 +25,28 @@ impl SearchResult {
         Self {
             document_id: document_id.into(),
             score,
+        }
+    }
+}
+
+/// A search response containing results and per-document explanations.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchResponse {
+    /// Ranked search results.
+    pub results: Vec<SearchResult>,
+    /// Per-document score explanations keyed by document ID.
+    pub explanations: Vec<(String, Vec<ScoreExplanation>)>,
+}
+
+impl SearchResponse {
+    /// Create a new `SearchResponse`.
+    pub fn new(
+        results: Vec<SearchResult>,
+        explanations: Vec<(String, Vec<ScoreExplanation>)>,
+    ) -> Self {
+        Self {
+            results,
+            explanations,
         }
     }
 }
@@ -55,5 +79,14 @@ mod tests {
         let a = SearchResult::new("doc1", 0.5);
         let b = SearchResult::new("doc1", 0.5);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn search_response_creation() {
+        let results = vec![SearchResult::new("doc1", 1.0)];
+        let explanations = vec![("doc1".to_string(), vec![])];
+        let response = SearchResponse::new(results.clone(), explanations.clone());
+        assert_eq!(response.results, results);
+        assert_eq!(response.explanations, explanations);
     }
 }
