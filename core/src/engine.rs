@@ -1,6 +1,8 @@
 use crate::document::Document;
 use crate::error::SearchError;
 use crate::index::IndexManager;
+use crate::query::executor::QueryExecutor;
+use crate::query::SearchRequest;
 use crate::schema::Mapping;
 use crate::types::{SearchHit, SearchResponse};
 
@@ -220,6 +222,81 @@ impl SearchEngine {
         Ok(SearchResponse::new(results, explanations))
     }
 
+    /// Execute a structured search request against an index.
+    ///
+    /// Combines a full-text match query with optional term/range filters,
+    /// runs BM25 ranking, and returns filtered results.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use pelisearch_core::document::Document;
+    /// use pelisearch_core::engine::SearchEngine;
+    /// use pelisearch_core::query::{Query, MatchQuery, RangeQuery, SearchRequest};
+    ///
+    /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    ///
+    /// let mut fields = HashMap::new();
+    /// fields.insert("title".to_string(), serde_json::json!("electric bike"));
+    /// fields.insert("price".to_string(), serde_json::json!(799));
+    /// let doc = Document::new("doc1", fields).unwrap();
+    /// engine.add_document("products", doc).unwrap();
+    ///
+    /// let request = SearchRequest {
+    ///     query: Query::Match(MatchQuery::new("title", "bike")),
+    ///     filters: vec![
+    ///         Query::Range(RangeQuery::new("price").with_lte(1000.0)),
+    ///     ],
+    /// };
+    /// let results = engine.search_request("products", &request).unwrap();
+    /// assert_eq!(results.len(), 1);
+    /// ```
+    pub fn search_request(
+        &self,
+        index_name: &str,
+        request: &SearchRequest,
+    ) -> Result<Vec<SearchHit>, SearchError> {
+        let index = self.manager.get_index(index_name)?;
+        QueryExecutor::execute(index, request)
+    }
+
+    /// Execute a structured search request and return results with explanations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use pelisearch_core::document::Document;
+    /// use pelisearch_core::engine::SearchEngine;
+    /// use pelisearch_core::query::{Query, MatchQuery, SearchRequest};
+    ///
+    /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    ///
+    /// let mut fields = HashMap::new();
+    /// fields.insert("title".to_string(), serde_json::json!("hello world"));
+    /// let doc = Document::new("doc1", fields).unwrap();
+    /// engine.add_document("products", doc).unwrap();
+    ///
+    /// let request = SearchRequest {
+    ///     query: Query::Match(MatchQuery::new("title", "hello")),
+    ///     filters: vec![],
+    /// };
+    /// let response = engine.search_request_with_explanations("products", &request).unwrap();
+    /// assert_eq!(response.results.len(), 1);
+    /// assert_eq!(response.explanations.len(), 1);
+    /// ```
+    pub fn search_request_with_explanations(
+        &self,
+        index_name: &str,
+        request: &SearchRequest,
+    ) -> Result<SearchResponse, SearchError> {
+        let index = self.manager.get_index(index_name)?;
+        QueryExecutor::execute_with_explanations(index, request)
+    }
+
     /// Get a document from a specific index.
     ///
     /// # Examples
@@ -255,6 +332,7 @@ impl Default for SearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::query::{MatchQuery, Query, RangeQuery, SearchRequest};
     use crate::schema::{Field, FieldType};
     use std::collections::HashMap;
 
@@ -424,6 +502,62 @@ mod tests {
             assert!(!exps.is_empty());
             assert!(response.results.iter().any(|r| &r.document_id == doc_id));
         }
+    }
+
+    #[test]
+    fn search_request_with_filters() {
+        let mut engine = SearchEngine::new();
+        engine.create_index("products").unwrap();
+
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("electric bike"));
+        fields.insert("price".to_string(), serde_json::json!(799));
+        let doc = Document::new("doc1", fields).unwrap();
+        engine.add_document("products", doc).unwrap();
+
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("premium bike"));
+        fields.insert("price".to_string(), serde_json::json!(1500));
+        let doc = Document::new("doc2", fields).unwrap();
+        engine.add_document("products", doc).unwrap();
+
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "bike")),
+            filters: vec![Query::Range(RangeQuery::new("price").with_lte(1000.0))],
+        };
+        let results = engine.search_request("products", &request).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].document_id, "doc1");
+    }
+
+    #[test]
+    fn search_request_explanations() {
+        let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
+
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("hello world"));
+        let doc = Document::new("doc1", fields).unwrap();
+        engine.add_document("test", doc).unwrap();
+
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "hello")),
+            filters: vec![],
+        };
+        let response = engine.search_request_with_explanations("test", &request).unwrap();
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.explanations.len(), 1);
+    }
+
+    #[test]
+    fn search_request_in_nonexistent_index_fails() {
+        let engine = SearchEngine::new();
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "hello")),
+            filters: vec![],
+        };
+        let err = engine.search_request("nonexistent", &request).unwrap_err();
+        assert!(matches!(err, SearchError::Internal(_)));
     }
 
     #[test]
