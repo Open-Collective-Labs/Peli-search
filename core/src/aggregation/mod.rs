@@ -6,4 +6,4 @@ pub use aggregation::Aggregation;
 pub use metrics::{
     AverageAggregation, CountAggregation, MaxAggregation, MinAggregation, SumAggregation,
 };
-pub use terms::TermsAggregation;
+pub use terms::{TermsAggregation, TermsBucket};
