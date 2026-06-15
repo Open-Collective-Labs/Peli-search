@@ -2,7 +2,7 @@ use crate::document::Document;
 use crate::error::SearchError;
 use crate::index::IndexManager;
 use crate::schema::Mapping;
-use crate::types::{SearchResponse, SearchResult};
+use crate::types::{SearchHit, SearchResponse, SearchResult};
 
 /// High-level coordinator that routes operations to named indexes.
 ///
@@ -170,7 +170,7 @@ impl SearchEngine {
         &self,
         index_name: &str,
         query: &str,
-    ) -> Result<Vec<SearchResult>, SearchError> {
+    ) -> Result<Vec<SearchHit>, SearchError> {
         self.manager.search(index_name, query)
     }
 
