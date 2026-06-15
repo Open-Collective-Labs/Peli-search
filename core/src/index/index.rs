@@ -200,6 +200,11 @@ impl Index {
         &self.mapping
     }
 
+    /// Reference to the collection statistics (used by search with explanations).
+    pub fn stats_ref(&self) -> &CollectionStats {
+        &self.stats
+    }
+
     fn extract_text(&self, document: &Document) -> String {
         let mut parts: Vec<String> = Vec::new();
         for value in document.fields.values() {
