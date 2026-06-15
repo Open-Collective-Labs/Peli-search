@@ -3,8 +3,10 @@ use std::collections::HashMap;
 use crate::document::Document;
 use crate::error::SearchError;
 use crate::index::InvertedIndex;
+
+use crate::ranking::statistics::CollectionStats;
 use crate::search;
-use crate::types::SearchResult;
+use crate::types::{SearchResponse, SearchResult};
 
 /// High-level search engine that coordinates tokenization, indexing, and search.
 ///
@@ -29,6 +31,7 @@ use crate::types::SearchResult;
 pub struct SearchEngine {
     documents: HashMap<String, Document>,
     index: InvertedIndex,
+    stats: CollectionStats,
 }
 
 impl SearchEngine {
@@ -37,6 +40,7 @@ impl SearchEngine {
         Self {
             documents: HashMap::new(),
             index: InvertedIndex::new(),
+            stats: CollectionStats::new(),
         }
     }
 
@@ -72,6 +76,7 @@ impl SearchEngine {
 
         let text = self.extract_text(&document);
         self.index.add_document(&document.id, &text)?;
+        self.stats.update_document(&document.id, &text);
         self.documents.insert(document.id.clone(), document);
         Ok(())
     }
@@ -96,14 +101,15 @@ impl SearchEngine {
             return Err(SearchError::DocumentNotFound(id.to_string()));
         }
         self.index.remove_document(id);
+        self.stats.remove_document(id);
         self.documents.remove(id);
         Ok(())
     }
 
-    /// Search for documents matching the query.
+    /// Search for documents matching the query using BM25 ranking.
     ///
-    /// Returns a list of `SearchResult` entries sorted by relevance
-    /// (number of matching terms).
+    /// Returns a list of `SearchResult` entries sorted by relevance (BM25 score
+    /// descending).
     ///
     /// # Examples
     ///
@@ -121,10 +127,39 @@ impl SearchEngine {
     ///
     /// let results = engine.search("electric bike").unwrap();
     /// assert_eq!(results.len(), 1);
-    /// assert_eq!(results[0].score, 2.0);
     /// ```
     pub fn search(&self, query: &str) -> Result<Vec<SearchResult>, SearchError> {
-        Ok(search::search(&self.index, query))
+        Ok(search::search(&self.index, &self.stats, query))
+    }
+
+    /// Search with BM25 ranking and return per-document score explanations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use pelisearch_core::document::Document;
+    /// use pelisearch_core::engine::SearchEngine;
+    ///
+    /// let mut engine = SearchEngine::new();
+    /// let mut fields = HashMap::new();
+    /// fields.insert("title".to_string(), serde_json::json!("electric bike"));
+    /// let doc = Document::new("doc1", fields).unwrap();
+    /// engine.add_document(doc).unwrap();
+    ///
+    /// let response = engine.search_with_explanations("electric").unwrap();
+    /// assert_eq!(response.results.len(), 1);
+    /// assert_eq!(response.explanations.len(), 1);
+    /// ```
+    pub fn search_with_explanations(
+        &self,
+        query: &str,
+    ) -> Result<SearchResponse, SearchError> {
+        Ok(search::search_with_explanations(
+            &self.index,
+            &self.stats,
+            query,
+        ))
     }
 
     /// Get a document by its ID.
@@ -289,5 +324,29 @@ mod tests {
         let results = engine.search("commuter").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].document_id, "doc1");
+    }
+
+    #[test]
+    fn search_with_explanations_engine() {
+        let mut engine = SearchEngine::new();
+
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("electric bike"));
+        let doc = Document::new("doc1", fields).unwrap();
+        engine.add_document(doc).unwrap();
+
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("electric car"));
+        let doc = Document::new("doc2", fields).unwrap();
+        engine.add_document(doc).unwrap();
+
+        let response = engine.search_with_explanations("electric bike").unwrap();
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.explanations.len(), 2);
+
+        for (doc_id, exps) in &response.explanations {
+            assert!(!exps.is_empty());
+            assert!(response.results.iter().any(|r| &r.document_id == doc_id));
+        }
     }
 }
