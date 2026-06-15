@@ -2,6 +2,7 @@ pub mod document;
 pub mod engine;
 pub mod error;
 pub mod index;
+pub mod query;
 pub mod ranking;
 pub mod schema;
 pub mod search;
