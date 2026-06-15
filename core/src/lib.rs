@@ -6,6 +6,7 @@ pub mod index;
 pub mod query;
 pub mod ranking;
 pub mod schema;
+pub mod sort;
 pub mod search;
 pub mod tokenizer;
 pub mod types;
