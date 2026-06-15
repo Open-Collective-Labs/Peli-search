@@ -1,3 +1,4 @@
+pub mod executor;
 pub mod match_query;
 pub mod query;
 pub mod range_query;
