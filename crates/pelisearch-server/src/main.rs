@@ -32,7 +32,14 @@ async fn main() {
         .init();
 
     // Open the search engine
-    let state = match AppState::new(&config.data_path).await {
+    let state = match AppState::new(
+        &config.data_path,
+        if config.auth_enabled { config.api_key.clone() } else { None },
+        config.rate_limit_enabled,
+        config.rate_limit_requests_per_minute,
+    )
+    .await
+    {
         Ok(s) => std::sync::Arc::new(s),
         Err(e) => {
             eprintln!("FATAL: {e}");
@@ -41,7 +48,7 @@ async fn main() {
     };
 
     // Build the router
-    let app = routes::build_router(state);
+    let app = routes::build_router(state, &config);
 
     // Bind and serve
     let addr = SocketAddr::new(

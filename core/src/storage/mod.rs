@@ -1,11 +1,23 @@
 pub mod compaction;
 pub mod manifest;
+pub mod merge_policy;
+pub mod result_merger;
 pub mod segment;
+pub mod segment_manager;
+pub mod segment_metadata;
+pub mod segment_registry;
+pub mod segment_searcher;
 pub mod snapshot;
 pub mod storage;
 pub mod wal;
 
 pub use manifest::Manifest;
+pub use merge_policy::{MergePolicy, SegmentToMerge};
+pub use result_merger::ResultMerger;
+pub use segment_manager::SegmentManager;
+pub use segment_metadata::{SegmentMetadata, SegmentState};
+pub use segment_registry::SegmentRegistry;
+pub use segment_searcher::{SegmentSearchResult, SegmentSearcher};
 pub use snapshot::Snapshot;
 pub use storage::Storage;
 pub use wal::Wal;

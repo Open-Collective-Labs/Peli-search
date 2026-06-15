@@ -44,7 +44,7 @@ pub async fn health() -> Json<HealthResponse> {
 pub async fn list_indexes(
     State(state): State<SharedState>,
 ) -> Result<Json<IndexListResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let engine = state.engine.lock().await;
+    let engine = state.engine.read().await;
     let indexes = engine.list_indexes();
     Ok(Json(IndexListResponse { indexes }))
 }
@@ -54,7 +54,7 @@ pub async fn get_index(
     State(state): State<SharedState>,
     Path(name): Path<String>,
 ) -> Result<Json<IndexInfo>, (StatusCode, Json<ErrorResponse>)> {
-    let engine = state.engine.lock().await;
+    let engine = state.engine.read().await;
     let info = engine
         .get_index_info(&name)
         .map_err(|e| not_found_error(e.to_string()))?;
@@ -70,11 +70,16 @@ pub async fn create_index(
     if name.is_empty() {
         return Err(bad_request_error("index name must not be empty".into()));
     }
+    
+    // Validate index name (alphanumeric, dashes, underscores, 1-128 chars)
+    if name.len() > 128 || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(bad_request_error("index name must be 1-128 characters and contain only alphanumeric characters, dashes, and underscores".into()));
+    }
 
-    let mut engine = state.engine.lock().await;
+    let mut engine = state.engine.write().await;
     engine
         .create_index(&name)
-        .map_err(|e| handle_create_error(e))?;
+        .map_err(handle_create_error)?;
     Ok((
         StatusCode::CREATED,
         Json(IndexCreatedResponse { name }),
@@ -86,7 +91,7 @@ pub async fn delete_index(
     State(state): State<SharedState>,
     Path(name): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let mut engine = state.engine.lock().await;
+    let mut engine = state.engine.write().await;
     engine
         .delete_index(&name)
         .map_err(|e| not_found_error(e.to_string()))?;
@@ -94,11 +99,11 @@ pub async fn delete_index(
 }
 
 fn handle_create_error(e: SearchError) -> (StatusCode, Json<ErrorResponse>) {
-    let msg = e.to_string();
-    if msg.contains("already exists") {
-        conflict_error(msg)
-    } else {
-        bad_request_error(msg)
+    match e {
+        SearchError::IndexAlreadyExists(name) => {
+            conflict_error(format!("index '{name}' already exists"))
+        }
+        _ => bad_request_error(e.to_string())
     }
 }
 

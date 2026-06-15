@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pelisearch.dev/schemas/Document.json",
+  "title": "Document",
+  "type": "object",
+  "required": ["id", "fields"],
+  "properties": {
+    "id": { "type": "string", "description": "Unique document ID" },
+    "fields": {
+      "type": "object",
+      "description": "Document fields as key-value pairs",
+      "additionalProperties": true
+    }
+  }
+}

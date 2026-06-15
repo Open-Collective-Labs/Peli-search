@@ -1,0 +1,395 @@
+openapi: 3.1.0
+info:
+  title: PeliSearch API
+  description: REST API for PeliSearch — a full-text search engine with BM25 ranking, filters, sorting, and aggregations.
+  version: 0.1.0
+servers:
+  - url: http://localhost:7700
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /ready:
+    get:
+      summary: Readiness check
+      operationId: ready
+      responses:
+        "200":
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+
+  /metrics:
+    get:
+      summary: Operational metrics
+      operationId: metrics
+      responses:
+        "200":
+          description: Metrics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricSnapshot"
+
+  /indexes:
+    get:
+      summary: List all indexes
+      operationId: listIndexes
+      responses:
+        "200":
+          description: List of index names
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  indexes:
+                    type: array
+                    items:
+                      type: string
+    post:
+      summary: Create a new index
+      operationId: createIndex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Unique index name
+      responses:
+        "201":
+          description: Index created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+        "400":
+          description: Invalid index name
+        "409":
+          description: Index already exists
+
+  /indexes/{name}:
+    get:
+      summary: Get index metadata
+      operationId: getIndex
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Index metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  document_count:
+                    type: integer
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        field_type:
+                          type: string
+                        required:
+                          type: boolean
+        "404":
+          description: Index not found
+    delete:
+      summary: Delete an index
+      operationId: deleteIndex
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Index deleted
+        "404":
+          description: Index not found
+
+  /indexes/{name}/documents:
+    post:
+      summary: Add a document to an index
+      operationId: addDocument
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, fields]
+              properties:
+                id:
+                  type: string
+                  description: Unique document ID
+                fields:
+                  type: object
+                  description: Document fields as key-value pairs
+                  additionalProperties: true
+      responses:
+        "201":
+          description: Document added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        "400":
+          description: Invalid document
+        "404":
+          description: Index not found
+        "409":
+          description: Document already exists
+
+  /indexes/{name}/documents/bulk:
+    post:
+      summary: Add multiple documents in bulk
+      operationId: bulkAddDocuments
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documents]
+              properties:
+                documents:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, fields]
+                    properties:
+                      id:
+                        type: string
+                      fields:
+                        type: object
+                        additionalProperties: true
+      responses:
+        "201":
+          description: Bulk add result (partial success possible)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        status:
+                          type: string
+                          enum: [created, error]
+                        error:
+                          type: string
+                          nullable: true
+        "400":
+          description: Empty documents list
+        "404":
+          description: Index not found
+
+  /indexes/{name}/documents/{id}:
+    get:
+      summary: Get a document by ID
+      operationId: getDocument
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  fields:
+                    type: object
+                    additionalProperties: true
+        "404":
+          description: Index or document not found
+    delete:
+      summary: Delete a document from an index
+      operationId: deleteDocument
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Document deleted
+        "404":
+          description: Index or document not found
+
+  /indexes/{name}/search:
+    post:
+      summary: Search an index
+      operationId: search
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/LegacySearch"
+                - $ref: "#/components/schemas/DslSearch"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          description: Invalid query
+        "404":
+          description: Index not found
+
+components:
+  schemas:
+    # --- Legacy ---
+    LegacySearch:
+      type: object
+      required: [q]
+      properties:
+        q:
+          type: string
+          description: Simple query text (searches all fields)
+
+    # --- DSL ---
+    DslSearch:
+      type: object
+      required: [query]
+      properties:
+        query:
+          $ref: "#/components/schemas/QueryClause"
+
+    QueryClause:
+      type: object
+      properties:
+        match:
+          type: object
+          description: "Full-text match: field_name -> search text"
+          additionalProperties:
+            type: string
+          example: {"title": "electric bike"}
+      minProperties: 1
+
+    # --- Response ---
+    SearchResponse:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        aggregations:
+          type: object
+          description: Aggregation results keyed by name
+
+    SearchHit:
+      type: object
+      properties:
+        index:
+          type: string
+        document_id:
+          type: string
+        score:
+          type: number
+          format: float
+
+    MetricSnapshot:
+      type: object
+      properties:
+        request_count:
+          type: integer
+          description: Total HTTP requests handled
+        search_count:
+          type: integer
+          description: Total search queries executed
+        total_latency_ns:
+          type: integer
+          description: Accumulated latency in nanoseconds
+        document_count:
+          type: integer
+          description: Total documents across all indexes
+        index_count:
+          type: integer
+          description: Number of indexes

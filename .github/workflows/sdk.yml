@@ -1,0 +1,55 @@
+name: SDK
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "sdk/**"
+      - "docs/openapi.yaml"
+      - "crates/pelisearch-server/**"
+      - "core/**"
+      - ".github/workflows/sdk.yml"
+  pull_request:
+    paths:
+      - "sdk/**"
+      - "docs/openapi.yaml"
+      - "crates/pelisearch-server/**"
+      - "core/**"
+      - ".github/workflows/sdk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build server
+        run: cargo build -p pelisearch-server
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: SDK unit builds
+        run: |
+          cd sdk/javascript && npm ci && npm run build
+          cd ../python && pip install -e ".[dev]"
+          cd ../go/pelisearch && go build ./...
+          cd ../../.. && cargo check -p pelisearch
+
+      - name: SDK integration tests
+        run: chmod +x sdk/tests/run.sh && sdk/tests/run.sh

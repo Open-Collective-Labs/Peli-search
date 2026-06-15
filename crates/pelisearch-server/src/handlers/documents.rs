@@ -67,6 +67,20 @@ pub enum SearchRequestBody {
 #[derive(Debug, Deserialize)]
 pub struct SearchQueryDsl {
     pub query: QueryClause,
+    #[serde(default)]
+    pub filters: Vec<pelisearch_core::query::Query>,
+    #[serde(default)]
+    pub sort: Vec<pelisearch_core::sort::SortField>,
+    #[serde(default)]
+    pub aggregations: Vec<pelisearch_core::aggregation::Aggregation>,
+    #[serde(default)]
+    pub from: usize,
+    #[serde(default = "default_size")]
+    pub size: usize,
+}
+
+fn default_size() -> usize {
+    10
 }
 
 /// A single query clause. Currently only `match` is supported.
@@ -91,10 +105,10 @@ pub async fn add_document(
         bad_request_error(format!("invalid document: {e}"))
     })?;
 
-    let mut engine = state.engine.lock().await;
+    let mut engine = state.engine.write().await;
     engine
         .add_document(&index_name, doc)
-        .map_err(|e| handle_add_error(e))?;
+        .map_err(handle_add_error)?;
 
     Ok((
         StatusCode::CREATED,
@@ -112,7 +126,7 @@ pub async fn bulk_add_documents(
         return Err(bad_request_error("documents list must not be empty".into()));
     }
 
-    let mut engine = state.engine.lock().await;
+    let mut engine = state.engine.write().await;
     let mut results = Vec::with_capacity(payload.documents.len());
 
     for doc_req in payload.documents {
@@ -146,7 +160,7 @@ pub async fn get_document(
     State(state): State<SharedState>,
     Path((index_name, doc_id)): Path<(String, String)>,
 ) -> Result<Json<Document>, (StatusCode, Json<ErrorResponse>)> {
-    let engine = state.engine.lock().await;
+    let engine = state.engine.read().await;
     let doc = engine
         .get_document(&index_name, &doc_id)
         .map_err(|e| not_found_error(e.to_string()))?
@@ -159,7 +173,7 @@ pub async fn delete_document(
     State(state): State<SharedState>,
     Path((index_name, doc_id)): Path<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let mut engine = state.engine.lock().await;
+    let mut engine = state.engine.write().await;
     engine
         .remove_document(&index_name, &doc_id)
         .map_err(|e| not_found_error(e.to_string()))?;
@@ -184,11 +198,11 @@ pub async fn search(
     Path(index_name): Path<String>,
     Json(body): Json<SearchRequestBody>,
 ) -> Result<Json<pelisearch_core::types::SearchResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let request = build_search_request(&body).map_err(|e| bad_request_error(e))?;
+    let request = build_search_request(&body).map_err(bad_request_error)?;
 
     state.metrics.inc_search();
 
-    let engine = state.engine.lock().await;
+    let engine = state.engine.read().await;
     let response = engine
         .search_request_with_explanations(&index_name, &request)
         .map_err(|e| not_found_error(e.to_string()))?;
@@ -208,6 +222,8 @@ fn build_search_request(body: &SearchRequestBody) -> Result<SearchRequest, Strin
                 filters: vec![],
                 sort: vec![],
                 aggregations: vec![],
+                from: 0,
+                size: 10,
             })
         }
         SearchRequestBody::Dsl(dsl) => {
@@ -225,20 +241,22 @@ fn build_search_request(body: &SearchRequestBody) -> Result<SearchRequest, Strin
 
             Ok(SearchRequest {
                 query,
-                filters: vec![],
-                sort: vec![],
-                aggregations: vec![],
+                filters: dsl.filters.clone(),
+                sort: dsl.sort.clone(),
+                aggregations: dsl.aggregations.clone(),
+                from: dsl.from,
+                size: dsl.size,
             })
         }
     }
 }
 
 fn handle_add_error(e: pelisearch_core::error::SearchError) -> (StatusCode, Json<ErrorResponse>) {
-    let msg = e.to_string();
-    if msg.contains("already exists") {
-        (StatusCode::CONFLICT, Json(ErrorResponse { error: msg }))
-    } else {
-        bad_request_error(msg)
+    match e {
+        pelisearch_core::error::SearchError::DocumentAlreadyExists(id) => {
+            (StatusCode::CONFLICT, Json(ErrorResponse { error: format!("document '{id}' already exists") }))
+        }
+        _ => bad_request_error(e.to_string())
     }
 }
 

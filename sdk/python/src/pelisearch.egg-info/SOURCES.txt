@@ -1,0 +1,13 @@
+pyproject.toml
+src/pelisearch/__init__.py
+src/pelisearch/client.py
+src/pelisearch/documents.py
+src/pelisearch/exceptions.py
+src/pelisearch/indexes.py
+src/pelisearch/search.py
+src/pelisearch/types.py
+src/pelisearch.egg-info/PKG-INFO
+src/pelisearch.egg-info/SOURCES.txt
+src/pelisearch.egg-info/dependency_links.txt
+src/pelisearch.egg-info/requires.txt
+src/pelisearch.egg-info/top_level.txt

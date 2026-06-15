@@ -2,31 +2,47 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pelisearch_core::engine::SearchEngine;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use crate::handlers::openapi::OpenApiSpec;
+use crate::middleware::rate_limit::RateLimiter;
 
 /// Shared application state, accessible from all handlers.
 pub struct AppState {
     /// The search engine instance (wrapped in a mutex for interior mutability).
-    pub engine: Mutex<SearchEngine>,
+    pub engine: RwLock<SearchEngine>,
     /// Runtime metrics counters.
     pub metrics: Metrics,
     /// OpenAPI specification as cached JSON.
     pub openapi_spec: Option<OpenApiSpec>,
+    /// Optional API key for authentication (S-1).
+    pub api_key: Option<Arc<str>>,
+    /// Optional rate limiter (S-5).
+    pub rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 impl AppState {
     /// Create a new `AppState`, opening the persistent engine at `data_dir`.
-    pub async fn new(data_dir: impl Into<std::path::PathBuf>) -> Result<Self, String> {
+    pub async fn new(
+        data_dir: impl Into<std::path::PathBuf>,
+        api_key: Option<String>,
+        rate_limit_enabled: bool,
+        rate_limit_rpm: u64,
+    ) -> Result<Self, String> {
         let engine = SearchEngine::open(data_dir).map_err(|e| format!("failed to open engine: {e}"))?;
 
         let openapi_spec = Self::load_openapi();
 
         Ok(Self {
-            engine: Mutex::new(engine),
+            engine: RwLock::new(engine),
             metrics: Metrics::new(),
             openapi_spec,
+            api_key: api_key.map(Arc::from),
+            rate_limiter: if rate_limit_enabled {
+                Some(RateLimiter::new(rate_limit_rpm))
+            } else {
+                None
+            },
         })
     }
 

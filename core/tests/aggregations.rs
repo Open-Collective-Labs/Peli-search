@@ -43,6 +43,8 @@ fn terms_single_category() {
                 TermsAggregation::new("category").with_size(10),
             ),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -83,6 +85,8 @@ fn terms_multiple_categories() {
                 TermsAggregation::new("category").with_size(10),
             ),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = response.aggregations.get("category").unwrap();
@@ -105,6 +109,8 @@ fn terms_empty_index() {
                 TermsAggregation::new("category").with_size(10),
             ),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine
         .search_request_with_explanations("empty", &request)
@@ -124,6 +130,8 @@ fn count_aggregation() {
         aggregations: vec![
             pelisearch_core::aggregation::Aggregation::Count(CountAggregation::new("price")),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -141,6 +149,8 @@ fn min_aggregation() {
         aggregations: vec![
             pelisearch_core::aggregation::Aggregation::Min(MinAggregation::new("price")),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -161,6 +171,8 @@ fn max_aggregation() {
         aggregations: vec![
             pelisearch_core::aggregation::Aggregation::Max(MaxAggregation::new("price")),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -178,6 +190,8 @@ fn average_aggregation() {
         aggregations: vec![
             pelisearch_core::aggregation::Aggregation::Average(AverageAggregation::new("price")),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -195,6 +209,8 @@ fn sum_aggregation() {
         aggregations: vec![
             pelisearch_core::aggregation::Aggregation::Sum(SumAggregation::new("price")),
         ],
+        from: 0,
+        size: 10,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -236,6 +252,8 @@ fn combined_query_filters_sort_aggregations() {
             pelisearch_core::aggregation::Aggregation::Average(AverageAggregation::new("price")),
             pelisearch_core::aggregation::Aggregation::Count(CountAggregation::new("price")),
         ],
+        from: 0,
+        size: 10,
     };
 
     let response = engine

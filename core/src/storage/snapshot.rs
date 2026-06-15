@@ -12,12 +12,15 @@ use crate::ranking::statistics::CollectionStats;
 use super::segment::IndexSegmentData;
 
 /// Wrapper stored on disk that bundles snapshot data with an integrity checksum.
+///
+/// The payload is stored as a raw JSON string so the checksum remains stable
+/// across load (re-serializing `IndexSegmentData` can reorder HashMap keys).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SnapshotFile {
-    /// Simple 64-bit checksum (sum of bytes) of `data`'s JSON representation.
+    /// CRC32 checksum of `data_json`.
     checksum: u64,
-    /// The actual index data.
-    data: IndexSegmentData,
+    /// JSON-serialized [`IndexSegmentData`].
+    data_json: String,
 }
 
 /// A point-in-time snapshot of a single index's full state.
@@ -58,7 +61,10 @@ impl Snapshot {
         })?;
 
         let checksum = compute_checksum(data_json.as_bytes());
-        let snapshot_file = SnapshotFile { checksum, data };
+        let snapshot_file = SnapshotFile {
+            checksum,
+            data_json: data_json.clone(),
+        };
 
         let json = serde_json::to_string(&snapshot_file).map_err(|e| {
             io::Error::new(io::ErrorKind::Other, format!("snapshot file serialization error: {e}"))
@@ -68,7 +74,7 @@ impl Snapshot {
         fs::write(&tmp_path, &json)?;
         fs::rename(&tmp_path, &path)?;
 
-        Ok(Self { path, data: snapshot_file.data })
+        Ok(Self { path, data })
     }
 
     /// Load a snapshot from disk, verifying its integrity checksum.
@@ -85,11 +91,8 @@ impl Snapshot {
             io::Error::new(io::ErrorKind::Other, format!("snapshot parse error: {e}"))
         })?;
 
-        // Verify integrity
-        let data_json = serde_json::to_string(&snapshot_file.data).map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("snapshot re-serialization error: {e}"))
-        })?;
-        let actual_checksum = compute_checksum(data_json.as_bytes());
+        // Verify integrity against the stored JSON bytes
+        let actual_checksum = compute_checksum(snapshot_file.data_json.as_bytes());
         if actual_checksum != snapshot_file.checksum {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -100,7 +103,11 @@ impl Snapshot {
             ));
         }
 
-        Ok(Some(Self { path, data: snapshot_file.data }))
+        let data: IndexSegmentData = serde_json::from_str(&snapshot_file.data_json).map_err(|e| {
+            io::Error::new(io::ErrorKind::Other, format!("snapshot data parse error: {e}"))
+        })?;
+
+        Ok(Some(Self { path, data }))
     }
 
     /// Reconstruct an Index from the snapshot data.
@@ -115,16 +122,10 @@ impl Snapshot {
     }
 }
 
-/// Compute a deterministic 64-bit checksum from a byte slice.
-///
-/// Uses a simple sum-of-bytes approach that is stable across Rust versions
-/// and process invocations.
 fn compute_checksum(bytes: &[u8]) -> u64 {
-    let mut sum: u64 = 0;
-    for &b in bytes {
-        sum = sum.wrapping_add(b as u64);
-    }
-    sum
+    let mut hasher = crc32fast::Hasher::new();
+    hasher.update(bytes);
+    hasher.finalize() as u64
 }
 
 fn extract_documents(index: &Index) -> std::collections::HashMap<String, Document> {
@@ -224,10 +225,10 @@ mod tests {
 
         Snapshot::create_snapshot(dir.path(), &index).unwrap();
 
-        // Corrupt the snapshot file — change a field value (JSON stays valid)
+        // Corrupt the inner data_json payload (change document title inside escaped JSON)
         let path = dir.path().join("snapshot.json");
         let content = fs::read_to_string(&path).unwrap();
-        let corrupted = content.replace("\"hello world\"", "\"corrupted!\"");
+        let corrupted = content.replace("hello world", "corrupted!");
         assert_ne!(content, corrupted, "corruption must change content");
         fs::write(&path, &corrupted).unwrap();
 

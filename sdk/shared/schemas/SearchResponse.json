@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pelisearch.dev/schemas/SearchResponse.json",
+  "title": "SearchResponse",
+  "type": "object",
+  "required": ["hits", "total_hits", "page", "page_size"],
+  "properties": {
+    "hits": {
+      "type": "array",
+      "items": { "$ref": "SearchHit.json" }
+    },
+    "total_hits": { "type": "integer" },
+    "page": { "type": "integer" },
+    "page_size": { "type": "integer" },
+    "aggregations": { "type": "object", "additionalProperties": true },
+    "facet_distributions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": "integer" }
+      }
+    }
+  }
+}

@@ -38,6 +38,7 @@ pub struct IndexSegmentData {
 /// - Mappings (schema field definitions)
 /// - Statistics (collection-level stats for BM25 ranking)
 /// - Postings Lists (inverted index: term → document IDs)
+#[derive(Debug)]
 pub struct Segment {
     /// Monotonically increasing segment number.
     pub id: u64,
@@ -65,6 +66,19 @@ impl Segment {
         fs::create_dir_all(dir)?;
         let filename = format!("{id:06}.seg");
         let path = dir.join(&filename);
+
+        // Immutability enforcement: once a segment file exists, it must never
+        // be overwritten. Updates must create a new segment with a new ID.
+        if path.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "segment {} already exists at {}; segments are immutable and cannot be overwritten",
+                    id,
+                    path.display()
+                ),
+            ));
+        }
 
         let json = serde_json::to_string(data).map_err(|e| {
             io::Error::new(io::ErrorKind::Other, format!("serialization error: {e}"))
@@ -107,6 +121,33 @@ impl Segment {
         }
     }
 
+    /// Check whether this segment is immutable (i.e., its file exists on disk).
+    ///
+    /// A segment that exists on disk is immutable: its contents cannot be
+    /// changed. All updates must create a new segment with a new ID.
+    pub fn is_immutable(&self) -> bool {
+        self.path.exists()
+    }
+
+    /// Verify that this segment is immutable. Returns an error if the
+    /// segment file does not exist on disk.
+    ///
+    /// Use this before attempting reads to ensure the segment is in a
+    /// valid, finalized state.
+    pub fn ensure_immutable(&self) -> io::Result<()> {
+        if !self.path.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "segment {} does not exist at {}; cannot read from a non-existent segment",
+                    self.id,
+                    self.path.display()
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// Discover all segment files in a directory, returning them sorted by
     /// segment ID (oldest first).
     pub fn discover(dir: impl AsRef<Path>) -> io::Result<Vec<Self>> {
@@ -143,6 +184,35 @@ mod tests {
     use crate::schema::Mapping;
 
     use super::*;
+
+    #[test]
+    fn write_segment_rejects_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+
+        // First write succeeds
+        Segment::write_segment(dir.path(), 1, &data).unwrap();
+
+        // Second write with same ID must fail (immutability)
+        let err = Segment::write_segment(dir.path(), 1, &data).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        let msg = format!("{}", err);
+        assert!(msg.contains("immutable"), "error should mention immutability: {msg}");
+    }
+
+    #[test]
+    fn write_segment_different_ids_always_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+
+        // Writing different IDs should always succeed
+        Segment::write_segment(dir.path(), 1, &data).unwrap();
+        Segment::write_segment(dir.path(), 2, &data).unwrap();
+        Segment::write_segment(dir.path(), 3, &data).unwrap();
+
+        let segments = Segment::discover(dir.path()).unwrap();
+        assert_eq!(segments.len(), 3);
+    }
 
     fn sample_data() -> IndexSegmentData {
         let mut documents = HashMap::new();
@@ -404,5 +474,166 @@ mod tests {
     fn discover_nonexistent_directory() {
         let segments = Segment::discover("/tmp/nonexistent_seg_dir_xyz").unwrap();
         assert!(segments.is_empty());
+    }
+
+    #[test]
+    fn segment_is_immutable_after_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+
+        let seg = Segment::write_segment(dir.path(), 1, &data).unwrap();
+        assert!(seg.is_immutable(), "segment should be immutable after writing");
+    }
+
+    #[test]
+    fn segment_not_immutable_before_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let seg = Segment {
+            id: 1,
+            path: dir.path().join("000001.seg"),
+        };
+        assert!(!seg.is_immutable(), "segment should not be immutable before writing");
+    }
+
+    #[test]
+    fn ensure_immutable_succeeds_for_existing_segment() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+
+        let seg = Segment::write_segment(dir.path(), 1, &data).unwrap();
+        assert!(seg.ensure_immutable().is_ok());
+    }
+
+    #[test]
+    fn ensure_immutable_fails_for_nonexistent_segment() {
+        let dir = tempfile::tempdir().unwrap();
+        let seg = Segment {
+            id: 1,
+            path: dir.path().join("000001.seg"),
+        };
+        let err = seg.ensure_immutable().unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        assert!(format!("{}", err).contains("does not exist"));
+    }
+
+    #[test]
+    fn immutable_segment_rejects_overwrite_with_clear_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+
+        Segment::write_segment(dir.path(), 1, &data).unwrap();
+        let err = Segment::write_segment(dir.path(), 1, &data).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        let msg = format!("{}", err);
+        assert!(msg.contains("immutable"), "error must mention immutability: {msg}");
+        assert!(msg.contains("1"), "error must mention segment ID: {msg}");
+    }
+
+    #[test]
+    fn immutable_segments_cannot_be_modified_via_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut data1 = sample_data();
+        let mut data2 = sample_data();
+
+        // First write
+        data1.documents.insert(
+            "doc_orig".to_string(),
+            Document::new("doc_orig", HashMap::from([("title".to_string(), serde_json::json!("original"))])).unwrap(),
+        );
+        let seg = Segment::write_segment(dir.path(), 1, &data1).unwrap();
+
+        // Attempt to overwrite with different data
+        data2.documents.insert(
+            "doc_new".to_string(),
+            Document::new("doc_new", HashMap::from([("title".to_string(), serde_json::json!("modified"))])).unwrap(),
+        );
+        Segment::write_segment(dir.path(), 1, &data2).unwrap_err();
+
+        // Original data must be preserved
+        let loaded = Segment::read_segment(&seg.path).unwrap();
+        assert!(loaded.documents.contains_key("doc_orig"), "original data must be preserved");
+        assert!(!loaded.documents.contains_key("doc_new"), "new data must not overwrite");
+    }
+
+    #[test]
+    fn updates_must_create_new_segment() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Segment 1: original data
+        let mut data1 = sample_data();
+        data1.documents.insert(
+            "doc1".to_string(),
+            Document::new("doc1", HashMap::from([("title".to_string(), serde_json::json!("v1"))])).unwrap(),
+        );
+        let seg1 = Segment::write_segment(dir.path(), 1, &data1).unwrap();
+
+        // Segment 2: updated data (new segment, new ID)
+        let mut data2 = sample_data();
+        data2.documents.insert(
+            "doc1".to_string(),
+            Document::new("doc1", HashMap::from([("title".to_string(), serde_json::json!("v2"))])).unwrap(),
+        );
+        data2.documents.insert(
+            "doc2".to_string(),
+            Document::new("doc2", HashMap::from([("title".to_string(), serde_json::json!("new doc"))])).unwrap(),
+        );
+        let seg2 = Segment::write_segment(dir.path(), 2, &data2).unwrap();
+
+        // Both segments exist independently
+        assert!(seg1.is_immutable());
+        assert!(seg2.is_immutable());
+
+        let loaded1 = Segment::read_segment(&seg1.path).unwrap();
+        let loaded2 = Segment::read_segment(&seg2.path).unwrap();
+
+        // Segment 1 has original doc1
+        assert!(loaded1.documents.contains_key("doc1"));
+        assert!(!loaded1.documents.contains_key("doc2"));
+
+        // Segment 2 has updated doc1 + new doc2
+        assert!(loaded2.documents.contains_key("doc1"));
+        assert!(loaded2.documents.contains_key("doc2"));
+    }
+
+    #[test]
+    fn immutable_segment_data_preserved_after_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+
+        // Write segment in first session
+        let seg = Segment::write_segment(dir.path(), 1, &data).unwrap();
+        let original_json = fs::read_to_string(&seg.path).unwrap();
+
+        // Simulate restart: read back from disk
+        let loaded = Segment::read_segment(&seg.path).unwrap();
+        let restored_json = serde_json::to_string(&loaded).unwrap();
+
+        // Data must be byte-for-byte identical
+        assert_eq!(original_json, restored_json, "immutable segment data must survive restart");
+    }
+
+    #[test]
+    fn concurrent_reads_of_immutable_segment() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let dir = tempfile::tempdir().unwrap();
+        let data = sample_data();
+        let seg = Segment::write_segment(dir.path(), 1, &data).unwrap();
+        let path = Arc::new(seg.path.clone());
+
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let p = Arc::clone(&path);
+            handles.push(thread::spawn(move || {
+                let loaded = Segment::read_segment(&*p).unwrap();
+                assert_eq!(loaded.name, "test");
+                assert_eq!(loaded.documents.len(), 1);
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
     }
 }

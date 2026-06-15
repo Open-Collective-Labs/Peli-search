@@ -1,0 +1,8 @@
+{
+  "name": "pelisearch-blog-example",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@pelisearch/client": "file:../../../sdk/javascript"
+  }
+}

@@ -153,8 +153,8 @@ fn snapshot_corruption_detected() {
     // Corrupt the snapshot file
     let snap_path = index_dir(dir.path(), "test").join("snapshot.json");
     let content = fs::read_to_string(&snap_path).unwrap();
-    // Replace a value to corrupt the checksum
-    let corrupted = content.replace("\"hello\"", "\"corrupted\"");
+    // Corrupt the inner data_json payload so the checksum no longer matches
+    let corrupted = content.replace("hello", "corrupted!");
     fs::write(&snap_path, &corrupted).unwrap();
 
     // Opening the engine should fail for this index

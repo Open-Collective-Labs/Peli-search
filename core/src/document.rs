@@ -31,10 +31,15 @@ impl Document {
         id: impl Into<String>,
         fields: HashMap<String, serde_json::Value>,
     ) -> Result<Self, SearchError> {
-        let id = id.into();
+        let id = id.into().trim().to_string();
         if id.is_empty() {
             return Err(SearchError::InvalidDocumentId(
                 "document ID must not be empty".to_string(),
+            ));
+        }
+        if id.len() > 256 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+            return Err(SearchError::InvalidDocumentId(
+                "document ID must be 1-256 characters and contain only alphanumeric characters, dashes, underscores, and dots".to_string(),
             ));
         }
         Ok(Self { id, fields })

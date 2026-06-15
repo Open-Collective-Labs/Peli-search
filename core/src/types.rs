@@ -79,8 +79,9 @@ pub type AggregationResults = HashMap<String, serde_json::Value>;
 ///     SearchHit::new("products", "doc2", 0.80),
 /// ];
 /// let aggs = AggregationResults::new();
-/// let response = SearchResponse::new(hits, aggs);
+/// let response = SearchResponse::new(hits, aggs, 2);
 /// assert_eq!(response.hits.len(), 2);
+/// assert_eq!(response.total, 2);
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResponse {
@@ -89,12 +90,14 @@ pub struct SearchResponse {
     /// Aggregation results keyed by aggregation name.
     #[serde(default)]
     pub aggregations: AggregationResults,
+    /// Total number of matching hits before pagination.
+    pub total: usize,
 }
 
 impl SearchResponse {
     /// Create a new `SearchResponse`.
-    pub fn new(hits: Vec<SearchHit>, aggregations: AggregationResults) -> Self {
-        Self { hits, aggregations }
+    pub fn new(hits: Vec<SearchHit>, aggregations: AggregationResults, total: usize) -> Self {
+        Self { hits, aggregations, total }
     }
 }
 
@@ -154,9 +157,10 @@ mod tests {
     fn search_response_creation() {
         let hits = vec![SearchHit::new("idx", "doc1", 1.0)];
         let aggs = AggregationResults::new();
-        let response = SearchResponse::new(hits.clone(), aggs);
+        let response = SearchResponse::new(hits.clone(), aggs, 1);
         assert_eq!(response.hits, hits);
         assert!(response.aggregations.is_empty());
+        assert_eq!(response.total, 1);
     }
 
     #[test]
@@ -164,6 +168,7 @@ mod tests {
         let response = SearchResponse {
             hits: vec![SearchHit::new("idx", "doc1", 0.5)],
             aggregations: AggregationResults::new(),
+            total: 1,
         };
         let json = serde_json::to_string(&response).unwrap();
         let deserialized: SearchResponse = serde_json::from_str(&json).unwrap();

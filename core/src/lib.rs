@@ -1,4 +1,5 @@
 pub mod aggregation;
+pub mod compression;
 pub mod document;
 pub mod engine;
 pub mod error;

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pelisearch.dev/schemas/QueryClause.json",
+  "title": "QueryClause",
+  "type": "object",
+  "properties": {
+    "match": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "term": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "gte": { "type": "number" },
+          "lte": { "type": "number" },
+          "gt": { "type": "number" },
+          "lt": { "type": "number" }
+        }
+      }
+    }
+  },
+  "minProperties": 1
+}

@@ -137,5 +137,67 @@ fn bench_ranking(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_ranking);
+fn bench_and_vs_or_multi_term(c: &mut Criterion) {
+    let sizes = [100usize, 10_000, 100_000];
+
+    for &size in &sizes {
+        let data = build_data(size);
+        let group_name = format!("and_vs_or_{}_docs", size);
+
+        let mut group = c.benchmark_group(&group_name);
+        group.throughput(Throughput::Elements(1));
+
+        group.bench_with_input(
+            BenchmarkId::new("search_any_OR", size),
+            &data,
+            |b, d| {
+                b.iter(|| {
+                    search::search_any(
+                        black_box(&d.index),
+                        black_box(&d.stats),
+                        black_box(&d.multi_term),
+                    )
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("search_AND_optimized", size),
+            &data,
+            |b, d| {
+                b.iter(|| {
+                    search::search(
+                        black_box(&d.index),
+                        black_box(&d.stats),
+                        black_box(&d.multi_term),
+                    )
+                });
+            },
+        );
+
+        group.finish();
+
+        // Verify the optimization produces fewer scored docs
+        let or_results = search::search_any(&data.index, &data.stats, &data.multi_term);
+        let and_results = search::search(&data.index, &data.stats, &data.multi_term);
+        let or_count = or_results.len();
+        let and_count = and_results.len();
+
+        // Print for visual verification
+        eprintln!(
+            "  {group_name}: OR={or_count} docs, AND={and_count} docs, ratio={:.2}%",
+            if or_count > 0 {
+                and_count as f64 / or_count as f64 * 100.0
+            } else {
+                0.0
+            }
+        );
+    }
+}
+
+criterion_group!(
+    benches,
+    bench_ranking,
+    bench_and_vs_or_multi_term
+);
 criterion_main!(benches);

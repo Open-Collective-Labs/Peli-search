@@ -340,6 +340,27 @@ components:
       properties:
         query:
           $ref: "#/components/schemas/QueryClause"
+        filters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        sort:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        aggregations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        from:
+          type: integer
+          default: 0
+        size:
+          type: integer
+          default: 10
 
     QueryClause:
       type: object
@@ -363,6 +384,9 @@ components:
         aggregations:
           type: object
           description: Aggregation results keyed by name
+        total:
+          type: integer
+          description: Total number of matching hits before pagination
 
     SearchHit:
       type: object

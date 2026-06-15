@@ -13,6 +13,10 @@ pub enum SearchError {
     Internal(String),
     /// A document failed schema validation.
     SchemaValidationError(String),
+    /// An index with the given name already exists.
+    IndexAlreadyExists(String),
+    /// An index with the given name was not found.
+    IndexNotFound(String),
 }
 
 impl fmt::Display for SearchError {
@@ -23,6 +27,8 @@ impl fmt::Display for SearchError {
             Self::DocumentNotFound(id) => write!(f, "document '{id}' not found"),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
             Self::SchemaValidationError(msg) => write!(f, "schema validation error: {msg}"),
+            Self::IndexAlreadyExists(name) => write!(f, "index '{name}' already exists"),
+            Self::IndexNotFound(name) => write!(f, "index '{name}' not found"),
         }
     }
 }

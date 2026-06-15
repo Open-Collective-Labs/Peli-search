@@ -17,7 +17,7 @@ pub async fn ready(
     State(state): State<SharedState>,
 ) -> Result<Json<ReadyResponse>, (axum::http::StatusCode, Json<ErrorResponse>)> {
     // Verify the engine is functional by listing indexes
-    let engine = state.engine.lock().await;
+    let engine = state.engine.read().await;
     let _ = engine.list_indexes();
     Ok(Json(ReadyResponse {
         status: "ready".into(),
@@ -30,7 +30,7 @@ pub async fn ready(
 pub async fn metrics(
     State(state): State<SharedState>,
 ) -> Json<crate::state::MetricSnapshot> {
-    let engine = state.engine.lock().await;
+    let engine = state.engine.read().await;
     let snapshot = state.metrics.snapshot(&engine);
     Json(snapshot)
 }

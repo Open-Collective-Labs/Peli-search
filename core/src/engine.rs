@@ -367,7 +367,8 @@ impl SearchEngine {
             .map(|r| SearchHit::new(index_name, r.document_id, r.score))
             .collect();
 
-        Ok(SearchResponse::new(hits, AggregationResults::new()))
+        let total = hits.len();
+        Ok(SearchResponse::new(hits, AggregationResults::new(), total))
     }
 
     /// Execute a structured search request against an index.
@@ -399,6 +400,8 @@ impl SearchEngine {
     ///     ],
     ///     sort: vec![],
     ///     aggregations: vec![],
+    ///     from: 0,
+    ///     size: 10,
     /// };
     /// let results = engine.search_request("products", &request).unwrap();
     /// assert_eq!(results.len(), 1);
@@ -435,6 +438,8 @@ impl SearchEngine {
     ///     filters: vec![],
     ///     sort: vec![],
     ///     aggregations: vec![],
+    ///     from: 0,
+    ///     size: 10,
     /// };
     /// let response = engine.search_request_with_explanations("products", &request).unwrap();
     /// assert_eq!(response.hits.len(), 1);
@@ -469,7 +474,7 @@ impl SearchEngine {
             .collect();
         Ok(IndexInfo {
             name: index.name().to_string(),
-            document_count: index.list_document_ids().len(),
+            document_count: index.document_count(),
             fields,
         })
     }
@@ -590,7 +595,7 @@ mod tests {
     fn search_in_nonexistent_index_fails() {
         let engine = SearchEngine::new();
         let err = engine.search("nonexistent", "hello").unwrap_err();
-        assert!(matches!(err, SearchError::Internal(_)));
+        assert!(matches!(err, SearchError::IndexNotFound(_)));
     }
 
     #[test]
@@ -710,7 +715,9 @@ mod tests {
         engine.add_document("test", doc).unwrap();
 
         let response = engine.search_with_explanations("test", "electric bike").unwrap();
-        assert_eq!(response.hits.len(), 2);
+        // Only doc1 contains both "electric" AND "bike"
+        assert_eq!(response.hits.len(), 1);
+        assert_eq!(response.hits[0].document_id, "doc1");
         assert!(response.aggregations.is_empty());
 
         for hit in &response.hits {
@@ -740,6 +747,8 @@ mod tests {
             filters: vec![Query::Range(RangeQuery::new("price").with_lte(1000.0))],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = engine.search_request("products", &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -761,6 +770,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let response = engine.search_request_with_explanations("test", &request).unwrap();
         assert_eq!(response.hits.len(), 1);
@@ -775,9 +786,11 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let err = engine.search_request("nonexistent", &request).unwrap_err();
-        assert!(matches!(err, SearchError::Internal(_)));
+        assert!(matches!(err, SearchError::IndexNotFound(_)));
     }
 
     #[test]

@@ -48,6 +48,8 @@ use crate::types::{AggregationResults, SearchHit, SearchResponse, SearchResult};
 ///     ],
 ///     sort: vec![],
 ///     aggregations: vec![],
+///     from: 0,
+///     size: 10,
 /// };
 ///
 /// let results = QueryExecutor::execute(&index, &request).unwrap();
@@ -95,10 +97,13 @@ impl QueryExecutor {
     ///     filters: vec![],
     ///     sort: vec![],
     ///     aggregations: vec![],
+    ///     from: 0,
+    ///     size: 10,
     /// };
     ///
     /// let response = QueryExecutor::execute_with_explanations(&index, &request).unwrap();
     /// assert_eq!(response.hits.len(), 1);
+    /// assert_eq!(response.total, 1);
     /// assert!(response.aggregations.is_empty());
     /// ```
     pub fn execute_with_explanations(
@@ -109,15 +114,26 @@ impl QueryExecutor {
         let matches = filter_candidates(index, results, &request.filters);
         let sorted = sort_hits(matches, &request.sort, index);
 
-        let documents: Vec<Document> = sorted
+        let total = sorted.len();
+        
+        // Apply pagination
+        let paged_hits = if request.from >= sorted.len() {
+            Vec::new()
+        } else {
+            let end = std::cmp::min(request.from.saturating_add(request.size), sorted.len());
+            sorted[request.from..end].to_vec()
+        };
+
+        let documents: Vec<Document> = paged_hits
             .iter()
             .filter_map(|hit| index.get_document(&hit.document_id).cloned().ok())
             .collect();
         let agg_results = compute_aggregations(&request.aggregations, &documents);
 
         Ok(SearchResponse {
-            hits: sorted,
+            hits: paged_hits,
             aggregations: agg_results,
+            total,
         })
     }
 }
@@ -171,7 +187,26 @@ fn compute_aggregations(
 /// Retrieve BM25-ranked candidates for the given query.
 fn retrieve_candidates(index: &Index, query: &Query) -> Result<Vec<SearchResult>, SearchError> {
     match query {
-        Query::Match(MatchQuery { value, .. }) => Ok(index.search(value)),
+        Query::Match(MatchQuery { field, value }) => {
+            // Use OR semantics to collect all candidates across terms.
+            // Field-specific filtering is applied afterward.
+            let mut results = index.search_any(value);
+            if !field.is_empty() {
+                let query_tokens = crate::tokenizer::tokenize(value);
+                results.retain(|res| {
+                    if let Ok(doc) = index.get_document(&res.document_id) {
+                        if let Some(field_val) = doc.get_field(field) {
+                            if let serde_json::Value::String(s) = field_val {
+                                let field_tokens = crate::tokenizer::tokenize(s);
+                                return query_tokens.iter().any(|qt| field_tokens.contains(qt));
+                            }
+                        }
+                    }
+                    false
+                });
+            }
+            Ok(results)
+        }
         _ => {
             // Term and Range queries are handled as filters only;
             // return empty candidate set (no BM25 results).
@@ -276,6 +311,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 2);
@@ -289,6 +326,8 @@ mod tests {
             filters: vec![Query::Range(RangeQuery::new("price").with_lte(1000.0))],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -303,6 +342,8 @@ mod tests {
             filters: vec![Query::Term(TermQuery::new("category", "electronics"))],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -320,6 +361,8 @@ mod tests {
             ],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -334,6 +377,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert!(results.is_empty());
@@ -347,6 +392,8 @@ mod tests {
             filters: vec![Query::Range(RangeQuery::new("price").with_lt(500.0))],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert!(results.is_empty());
@@ -360,6 +407,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         // doc2 ("premium bike") matches both "bike" (1 token) and "premium" (1 token),
@@ -379,6 +428,8 @@ mod tests {
             filters: vec![Query::Range(RangeQuery::new("price").with_lte(1000.0))],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let response = QueryExecutor::execute_with_explanations(&index, &request).unwrap();
         assert_eq!(response.hits.len(), 1);
@@ -394,6 +445,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let no_filters = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(no_filters.len(), 2);
@@ -407,6 +460,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         for hit in &results {

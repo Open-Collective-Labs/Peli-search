@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pelisearch.dev/schemas/SearchRequest.json",
+  "title": "SearchRequest",
+  "type": "object",
+  "properties": {
+    "q": { "type": "string", "description": "Simple query text (searches all fields)" },
+    "query": { "$ref": "QueryClause.json" },
+    "filter": { "type": "string" },
+    "sort": { "type": "array", "items": { "type": "string" } },
+    "page": { "type": "integer", "minimum": 1 },
+    "page_size": { "type": "integer", "minimum": 1 },
+    "facets": { "type": "array", "items": { "type": "string" } },
+    "highlight": { "type": "boolean" },
+    "highlight_fields": { "type": "array", "items": { "type": "string" } },
+    "highlight_pre_tag": { "type": "string" },
+    "highlight_post_tag": { "type": "string" }
+  }
+}

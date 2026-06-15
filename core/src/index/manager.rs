@@ -50,9 +50,7 @@ impl IndexManager {
     pub fn create_index(&mut self, name: impl Into<String>) -> Result<(), SearchError> {
         let name: String = name.into();
         if self.indexes.contains_key(&name) {
-            return Err(SearchError::Internal(format!(
-                "index '{name}' already exists"
-            )));
+            return Err(SearchError::IndexAlreadyExists(name.to_string()));
         }
         self.indexes
             .insert(name.clone(), Index::new(name, Mapping::new(vec![])));
@@ -82,9 +80,7 @@ impl IndexManager {
     ) -> Result<(), SearchError> {
         let name: String = name.into();
         if self.indexes.contains_key(&name) {
-            return Err(SearchError::Internal(format!(
-                "index '{name}' already exists"
-            )));
+            return Err(SearchError::IndexAlreadyExists(name.to_string()));
         }
         self.indexes.insert(name.clone(), Index::new(name, mapping));
         Ok(())
@@ -106,9 +102,7 @@ impl IndexManager {
     /// ```
     pub fn delete_index(&mut self, name: &str) -> Result<(), SearchError> {
         if !self.indexes.contains_key(name) {
-            return Err(SearchError::Internal(format!(
-                "index '{name}' not found"
-            )));
+            return Err(SearchError::IndexNotFound(name.to_string()));
         }
         self.indexes.remove(name);
         Ok(())
@@ -131,7 +125,7 @@ impl IndexManager {
     pub fn get_index(&self, name: &str) -> Result<&Index, SearchError> {
         self.indexes
             .get(name)
-            .ok_or_else(|| SearchError::Internal(format!("index '{name}' not found")))
+            .ok_or_else(|| SearchError::IndexNotFound(name.to_string()))
     }
 
     /// Get a mutable reference to an index by name.
@@ -140,7 +134,7 @@ impl IndexManager {
     pub fn get_index_mut(&mut self, name: &str) -> Result<&mut Index, SearchError> {
         self.indexes
             .get_mut(name)
-            .ok_or_else(|| SearchError::Internal(format!("index '{name}' not found")))
+            .ok_or_else(|| SearchError::IndexNotFound(name.to_string()))
     }
 
     /// Check whether an index exists.
@@ -170,7 +164,7 @@ impl IndexManager {
 
     /// Total number of documents across all indexes.
     pub fn total_document_count(&self) -> u64 {
-        self.indexes.values().map(|idx| idx.list_document_ids().len() as u64).sum()
+        self.indexes.values().map(|idx| idx.document_count() as u64).sum()
     }
 
     /// Add a document to a specific index.
@@ -287,14 +281,14 @@ mod tests {
         let mut manager = IndexManager::new();
         manager.create_index("products").unwrap();
         let err = manager.create_index("products").unwrap_err();
-        assert!(matches!(err, SearchError::Internal(_)));
+        assert!(matches!(err, SearchError::IndexAlreadyExists(_)));
     }
 
     #[test]
     fn get_nonexistent_index_fails() {
         let manager = IndexManager::new();
         let err = manager.get_index("nonexistent").unwrap_err();
-        assert!(matches!(err, SearchError::Internal(_)));
+        assert!(matches!(err, SearchError::IndexNotFound(_)));
     }
 
     #[test]
@@ -310,7 +304,7 @@ mod tests {
     fn delete_nonexistent_index_fails() {
         let mut manager = IndexManager::new();
         let err = manager.delete_index("nonexistent").unwrap_err();
-        assert!(matches!(err, SearchError::Internal(_)));
+        assert!(matches!(err, SearchError::IndexNotFound(_)));
     }
 
     #[test]
@@ -349,7 +343,7 @@ mod tests {
         let mut manager = IndexManager::new();
         let doc = Document::new("doc1", HashMap::new()).unwrap();
         let err = manager.add_document("nonexistent", doc).unwrap_err();
-        assert!(matches!(err, SearchError::Internal(_)));
+        assert!(matches!(err, SearchError::IndexNotFound(_)));
     }
 
     #[test]

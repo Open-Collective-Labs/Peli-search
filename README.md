@@ -72,9 +72,13 @@ Generate analytics and faceted search experiences.
 
 ### Vector Search (Roadmap)
 
+(Not yet implemented)
+
 Semantic search powered by embeddings and vector similarity.
 
 ### Hybrid Search (Roadmap)
+
+(Not yet implemented)
 
 Combine lexical and vector search using modern ranking strategies.
 
@@ -85,16 +89,18 @@ Combine lexical and vector search using modern ranking strategies.
 ### Create an Index
 
 ```javascript
-const engine = new PeliSearch("./data");
+import { PeliSearchClient } from '@pelisearch/client';
 
-await engine.createIndex("products");
+const client = new PeliSearchClient({ host: "http://localhost:7700" });
+
+await client.indexes.create("products");
 ```
 
 ### Index Documents
 
 ```javascript
-await engine.index("products", {
-  id: 1,
+await client.documents.add("products", {
+  id: "1",
   title: "Electric Bike",
   price: 999
 });
@@ -103,7 +109,7 @@ await engine.index("products", {
 ### Search
 
 ```javascript
-const results = await engine.search("products", {
+const results = await client.search.search("products", {
   query: {
     match: {
       title: "bike"
@@ -140,7 +146,7 @@ Text Filter Ranking
 
 ## Supported SDKs
 
-Planned SDKs:
+Available SDKs:
 
 * Rust
 * Node.js

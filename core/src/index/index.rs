@@ -170,6 +170,16 @@ impl Index {
         search::search(&self.inverted_index, &self.stats, query)
     }
 
+    /// Search with OR semantics — returns documents containing ANY query term.
+    ///
+    /// Unlike `search()` which uses AND semantics for multi-term queries,
+    /// this returns all documents that match at least one term.
+    /// Useful for query pipelines that need broad candidate collection
+    /// (e.g., before applying field filters).
+    pub fn search_any(&self, query: &str) -> Vec<SearchResult> {
+        search::search_any(&self.inverted_index, &self.stats, query)
+    }
+
     /// Get a document by its ID.
     ///
     /// # Examples
@@ -213,6 +223,11 @@ impl Index {
     /// Return all document IDs currently stored in this index.
     pub fn list_document_ids(&self) -> Vec<String> {
         self.documents.keys().cloned().collect()
+    }
+
+    /// Returns the number of documents in the index.
+    pub fn document_count(&self) -> usize {
+        self.documents.len()
     }
 
     /// Recompute collection statistics from all stored documents.

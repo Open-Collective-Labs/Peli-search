@@ -321,7 +321,7 @@ mod tests {
             Field::new("count", FieldType::Integer, true),
         ]);
 
-        let doc = make_doc("doc1", vec![("count", serde_json::json!(3.14))]);
+        let doc = make_doc("doc1", vec![("count", serde_json::json!(2.5))]);
         assert!(mapping.validate_document(&doc).is_err());
 
         let doc = make_doc("doc2", vec![("count", serde_json::json!(42))]);

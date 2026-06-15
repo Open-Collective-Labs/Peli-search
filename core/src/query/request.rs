@@ -23,6 +23,8 @@ use crate::sort::SortField;
 ///     aggregations: vec![
 ///         Aggregation::Terms(TermsAggregation::new("category")),
 ///     ],
+///     from: 0,
+///     size: 10,
 /// };
 ///
 /// assert!(matches!(request.query, Query::Match(_)));
@@ -43,6 +45,16 @@ pub struct SearchRequest {
     /// Aggregations for computing summary metrics.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aggregations: Vec<Aggregation>,
+    /// The starting offset for pagination.
+    #[serde(default)]
+    pub from: usize,
+    /// The maximum number of hits to return.
+    #[serde(default = "default_size")]
+    pub size: usize,
+}
+
+fn default_size() -> usize {
+    10
 }
 
 #[cfg(test)]
@@ -56,6 +68,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         assert!(req.filters.is_empty());
     }
@@ -70,6 +84,8 @@ mod tests {
             ],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         assert_eq!(req.filters.len(), 2);
     }
@@ -83,6 +99,8 @@ mod tests {
             ],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let json = serde_json::to_string(&req).unwrap();
         let deserialized: SearchRequest = serde_json::from_str(&json).unwrap();
@@ -96,6 +114,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(!json.contains("filters"));
@@ -108,6 +128,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let debug = format!("{req:?}");
         assert!(debug.contains("f"));
@@ -121,6 +143,8 @@ mod tests {
             filters: vec![],
             sort: vec![],
             aggregations: vec![],
+            from: 0,
+            size: 10,
         };
         let b = a.clone();
         assert_eq!(a, b);

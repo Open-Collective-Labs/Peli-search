@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pelisearch.dev/schemas/IndexDefinition.json",
+  "title": "IndexDefinition",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string", "description": "Unique index name" }
+  }
+}

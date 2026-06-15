@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::ranking::bm25::BM25Config;
 use crate::ranking::statistics::CollectionStats;
 use crate::tokenizer::tokenize;
@@ -71,14 +73,13 @@ pub fn explain_document(query: &str, doc_id: &str, stats: &CollectionStats) -> V
     };
 
     let query_tokens = tokenize(query);
-    let mut seen_terms = Vec::new();
+    let mut seen_terms = HashSet::with_capacity(query_tokens.len());
     let mut explanations = Vec::new();
 
     for token in &query_tokens {
-        if seen_terms.contains(token) {
+        if !seen_terms.insert(token.clone()) {
             continue;
         }
-        seen_terms.push(token.clone());
 
         let term_stats = match stats.get_term_stats(token) {
             Some(s) => s,
