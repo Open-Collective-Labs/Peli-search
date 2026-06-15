@@ -2,7 +2,7 @@ use crate::document::Document;
 use crate::error::SearchError;
 use crate::index::IndexManager;
 use crate::schema::Mapping;
-use crate::types::{SearchHit, SearchResponse, SearchResult};
+use crate::types::{SearchHit, SearchResponse};
 
 /// High-level coordinator that routes operations to named indexes.
 ///
