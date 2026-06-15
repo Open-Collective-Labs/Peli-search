@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::document::Document;
 use crate::error::SearchError;
 use crate::schema::field::Field;
@@ -21,7 +23,7 @@ use crate::schema::field_type::FieldType;
 /// assert!(mapping.field_exists("title"));
 /// assert!(!mapping.field_exists("nonexistent"));
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Mapping {
     fields: Vec<Field>,
 }

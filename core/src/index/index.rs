@@ -205,6 +205,30 @@ impl Index {
         &self.stats
     }
 
+    /// Clone the inverted index (used by snapshots).
+    pub fn inverted_index_clone(&self) -> InvertedIndex {
+        self.inverted_index.clone()
+    }
+
+    /// Return all document IDs currently stored in this index.
+    pub fn list_document_ids(&self) -> Vec<String> {
+        self.documents.keys().cloned().collect()
+    }
+
+    /// Recompute collection statistics from all stored documents.
+    ///
+    /// This ensures consistency after loading state from disk (segments or
+    /// snapshots) where documents may have been deserialized without
+    /// re-running the statistics pipeline.
+    pub fn rebuild_stats(&mut self) {
+        let mut new_stats = CollectionStats::new();
+        for doc in self.documents.values() {
+            let text = self.extract_text(doc);
+            new_stats.update_document(&doc.id, &text);
+        }
+        self.stats = new_stats;
+    }
+
     fn extract_text(&self, document: &Document) -> String {
         let mut parts: Vec<String> = Vec::new();
         for value in document.fields.values() {

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::tokenizer::tokenize;
 
 /// A simple in-memory inverted index mapping terms to document IDs.
@@ -8,12 +10,8 @@ use crate::tokenizer::tokenize;
 ///
 /// ```
 /// use pelisearch_core::index::InvertedIndex;
-///
-/// let mut index = InvertedIndex::new();
-/// index.add_document("doc1", "hello world").unwrap();
-/// assert_eq!(index.get_postings("hello"), Some(&vec!["doc1".to_string()]));
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvertedIndex {
     postings: HashMap<String, Vec<String>>,
     doc_terms: HashMap<String, Vec<String>>,

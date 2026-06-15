@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
+use crate::aggregation::Aggregation;
 use crate::document::Document;
 use crate::error::SearchError;
 use crate::filter::FilterEvaluator;
 use crate::index::Index;
 use crate::query::request::SearchRequest;
 use crate::query::{MatchQuery, Query};
-use crate::ranking::explanation::{explain_document, ScoreExplanation};
-use crate::types::{SearchHit, SearchResponse, SearchResult};
+use crate::sort::comparator::sort_hits;
+use crate::types::{AggregationResults, SearchHit, SearchResponse, SearchResult};
 
 /// Executes structured search requests against an index.
 ///
@@ -43,6 +46,8 @@ use crate::types::{SearchHit, SearchResponse, SearchResult};
 ///     filters: vec![
 ///         Query::Range(RangeQuery::new("price").with_lte(1000.0)),
 ///     ],
+///     sort: vec![],
+///     aggregations: vec![],
 /// };
 ///
 /// let results = QueryExecutor::execute(&index, &request).unwrap();
@@ -54,14 +59,19 @@ pub struct QueryExecutor;
 impl QueryExecutor {
     /// Execute a search request against an index.
     ///
-    /// Returns BM25-ranked search hits, with filters applied.
+    /// Pipeline: candidate retrieval → filters → sorting → response.
+    /// BM25 ranking is preserved when no explicit sort is specified.
     pub fn execute(index: &Index, request: &SearchRequest) -> Result<Vec<SearchHit>, SearchError> {
         let results = retrieve_candidates(index, &request.query)?;
         let matches = filter_candidates(index, results, &request.filters);
-        Ok(matches)
+        let sorted = sort_hits(matches, &request.sort, index);
+        Ok(sorted)
     }
 
-    /// Execute a search request and return results with per-document explanations.
+    /// Execute a search request and return results with aggregations.
+    ///
+    /// Pipeline: candidate retrieval → filters → sorting → aggregations → response.
+    /// BM25 ranking is preserved when no explicit sort is specified.
     ///
     /// # Examples
     ///
@@ -83,11 +93,13 @@ impl QueryExecutor {
     /// let request = SearchRequest {
     ///     query: Query::Match(MatchQuery::new("title", "hello")),
     ///     filters: vec![],
+    ///     sort: vec![],
+    ///     aggregations: vec![],
     /// };
     ///
     /// let response = QueryExecutor::execute_with_explanations(&index, &request).unwrap();
-    /// assert_eq!(response.results.len(), 1);
-    /// assert_eq!(response.explanations.len(), 1);
+    /// assert_eq!(response.hits.len(), 1);
+    /// assert!(response.aggregations.is_empty());
     /// ```
     pub fn execute_with_explanations(
         index: &Index,
@@ -95,27 +107,65 @@ impl QueryExecutor {
     ) -> Result<SearchResponse, SearchError> {
         let results = retrieve_candidates(index, &request.query)?;
         let matches = filter_candidates(index, results, &request.filters);
+        let sorted = sort_hits(matches, &request.sort, index);
 
-        let query_text = match &request.query {
-            Query::Match(mq) => &mq.value,
-            _ => "",
-        };
-
-        let explanations: Vec<(String, Vec<ScoreExplanation>)> = matches
+        let documents: Vec<Document> = sorted
             .iter()
-            .map(|hit| {
-                let exps = explain_document(query_text, &hit.document_id, index.stats_ref());
-                (hit.document_id.clone(), exps)
-            })
+            .filter_map(|hit| index.get_document(&hit.document_id).cloned().ok())
             .collect();
+        let agg_results = compute_aggregations(&request.aggregations, &documents);
 
-        let search_results: Vec<SearchResult> = matches
-            .into_iter()
-            .map(|hit| SearchResult::new(hit.document_id, hit.score))
-            .collect();
-
-        Ok(SearchResponse::new(search_results, explanations))
+        Ok(SearchResponse {
+            hits: sorted,
+            aggregations: agg_results,
+        })
     }
+}
+
+fn compute_aggregations(
+    aggregations: &[Aggregation],
+    documents: &[Document],
+) -> AggregationResults {
+    let mut results = AggregationResults::new();
+    for agg in aggregations {
+        let (key, value) = match agg {
+            Aggregation::Terms(terms) => {
+                let buckets = terms.execute(documents);
+                let map: HashMap<String, serde_json::Value> = buckets
+                    .into_iter()
+                    .map(|b| {
+                        (
+                            b.key,
+                            serde_json::Value::Number(serde_json::Number::from(b.count)),
+                        )
+                    })
+                    .collect();
+                (terms.field.clone(), serde_json::Value::Object(map.into_iter().collect()))
+            }
+            Aggregation::Count(count) => {
+                let result = count.execute(documents);
+                (count.field.clone(), serde_json::to_value(result).unwrap())
+            }
+            Aggregation::Min(min) => {
+                let result = min.execute(documents);
+                (min.field.clone(), serde_json::to_value(result).unwrap())
+            }
+            Aggregation::Max(max) => {
+                let result = max.execute(documents);
+                (max.field.clone(), serde_json::to_value(result).unwrap())
+            }
+            Aggregation::Average(avg) => {
+                let result = avg.execute(documents);
+                (avg.field.clone(), serde_json::to_value(result).unwrap())
+            }
+            Aggregation::Sum(sum) => {
+                let result = sum.execute(documents);
+                (sum.field.clone(), serde_json::to_value(result).unwrap())
+            }
+        };
+        results.insert(key, value);
+    }
+    results
 }
 
 /// Retrieve BM25-ranked candidates for the given query.
@@ -224,6 +274,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 2);
@@ -235,6 +287,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![Query::Range(RangeQuery::new("price").with_lte(1000.0))],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -247,6 +301,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![Query::Term(TermQuery::new("category", "electronics"))],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -262,6 +318,8 @@ mod tests {
                 Query::Term(TermQuery::new("category", "electronics")),
                 Query::Range(RangeQuery::new("price").with_lte(1000.0)),
             ],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -274,6 +332,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "nonexistent")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert!(results.is_empty());
@@ -285,6 +345,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![Query::Range(RangeQuery::new("price").with_lt(500.0))],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert!(results.is_empty());
@@ -296,6 +358,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         // doc2 ("premium bike") matches both "bike" (1 token) and "premium" (1 token),
@@ -313,12 +377,13 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![Query::Range(RangeQuery::new("price").with_lte(1000.0))],
+            sort: vec![],
+            aggregations: vec![],
         };
         let response = QueryExecutor::execute_with_explanations(&index, &request).unwrap();
-        assert_eq!(response.results.len(), 1);
-        assert_eq!(response.explanations.len(), 1);
-        assert_eq!(response.explanations[0].0, "doc1");
-        assert!(!response.explanations[0].1.is_empty());
+        assert_eq!(response.hits.len(), 1);
+        assert_eq!(response.hits[0].document_id, "doc1");
+        assert!(response.aggregations.is_empty());
     }
 
     #[test]
@@ -327,6 +392,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let no_filters = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(no_filters.len(), 2);
@@ -338,6 +405,8 @@ mod tests {
         let request = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "bike")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         for hit in &results {

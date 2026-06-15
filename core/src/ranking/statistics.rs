@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::tokenizer::tokenize;
 
 /// Statistics about a single term across the collection.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TermStats {
     /// Total number of times the term appears across all documents.
     pub term_frequency: u64,
@@ -12,7 +14,7 @@ pub struct TermStats {
 }
 
 /// Collection-level statistics required for BM25 scoring.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionStats {
     /// Total number of documents in the collection.
     total_documents: u64,

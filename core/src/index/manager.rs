@@ -168,6 +168,11 @@ impl IndexManager {
         names
     }
 
+    /// Total number of documents across all indexes.
+    pub fn total_document_count(&self) -> u64 {
+        self.indexes.values().map(|idx| idx.list_document_ids().len() as u64).sum()
+    }
+
     /// Add a document to a specific index.
     ///
     /// # Examples

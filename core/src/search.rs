@@ -1,9 +1,8 @@
 use crate::index::InvertedIndex;
-use crate::ranking::explanation::{explain_document, ScoreExplanation};
 use crate::ranking::scorer::Scorer;
 use crate::ranking::statistics::CollectionStats;
 use crate::tokenizer::tokenize;
-use crate::types::{SearchResponse, SearchResult};
+use crate::types::{AggregationResults, SearchHit, SearchResponse, SearchResult};
 
 /// Search an inverted index for documents matching the query using BM25 ranking.
 ///
@@ -76,8 +75,8 @@ pub fn search(
 /// stats.update_document("doc_a", "electric bike");
 ///
 /// let response = search_with_explanations(&index, &stats, "electric");
-/// assert_eq!(response.results.len(), 1);
-/// assert!(!response.explanations.is_empty());
+/// assert_eq!(response.hits.len(), 1);
+/// assert!(response.aggregations.is_empty());
 /// ```
 pub fn search_with_explanations(
     index: &InvertedIndex,
@@ -85,16 +84,12 @@ pub fn search_with_explanations(
     query: &str,
 ) -> SearchResponse {
     let results = search(index, stats, query);
-
-    let explanations: Vec<(String, Vec<ScoreExplanation>)> = results
-        .iter()
-        .map(|r| {
-            let exps = explain_document(query, &r.document_id, stats);
-            (r.document_id.clone(), exps)
-        })
+    let hits: Vec<SearchHit> = results
+        .into_iter()
+        .map(|r| SearchHit::new("", r.document_id, r.score))
         .collect();
 
-    SearchResponse::new(results, explanations)
+    SearchResponse::new(hits, AggregationResults::new())
 }
 
 #[cfg(test)]
@@ -227,17 +222,8 @@ mod tests {
         let stats = setup_stats();
         let response = search_with_explanations(&index, &stats, "electric bike");
 
-        assert_eq!(response.results.len(), response.explanations.len());
-        for (doc_id, exps) in &response.explanations {
-            // Each result should have at least one non-zero explanation
-            assert!(!exps.is_empty());
-            for exp in exps {
-                assert_eq!(exp.term, exp.term.to_lowercase());
-                assert!(exp.contribution >= 0.0);
-            }
-            // Verify doc_id in results
-            assert!(response.results.iter().any(|r| &r.document_id == doc_id));
-        }
+        assert_eq!(response.hits.len(), 3);
+        assert!(response.aggregations.is_empty());
     }
 
     #[test]
@@ -245,7 +231,7 @@ mod tests {
         let index = setup_index();
         let stats = setup_stats();
         let response = search_with_explanations(&index, &stats, "zzzzz");
-        assert!(response.results.is_empty());
-        assert!(response.explanations.is_empty());
+        assert!(response.hits.is_empty());
+        assert!(response.aggregations.is_empty());
     }
 }

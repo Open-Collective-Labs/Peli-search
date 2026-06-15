@@ -1,28 +1,34 @@
 use serde::{Deserialize, Serialize};
 
+use crate::aggregation::Aggregation;
 use crate::query::Query;
+use crate::sort::SortField;
 
-/// A structured search request combining a main query with optional filters.
-///
-/// The `query` field holds the primary search intent (e.g. a `Match` against a
-/// text field). The `filters` slice holds additional constraints (e.g. `Term`
-/// or `Range` queries) that narrow the candidate set before ranking.
+/// A structured search request combining a main query with optional filters,
+/// sort specifications, and aggregations.
 ///
 /// # Examples
 ///
 /// ```
-/// use pelisearch_core::query::{Query, MatchQuery, TermQuery, RangeQuery, SearchRequest};
+/// use pelisearch_core::aggregation::{Aggregation, TermsAggregation};
+/// use pelisearch_core::query::{Query, MatchQuery, RangeQuery, SearchRequest};
+/// use pelisearch_core::sort::SortField;
 ///
 /// let request = SearchRequest {
 ///     query: Query::Match(MatchQuery::new("title", "bike")),
 ///     filters: vec![
-///         Query::Term(TermQuery::new("category", "electronics")),
 ///         Query::Range(RangeQuery::new("price").with_lte(1000.0)),
+///     ],
+///     sort: vec![SortField::asc("price")],
+///     aggregations: vec![
+///         Aggregation::Terms(TermsAggregation::new("category")),
 ///     ],
 /// };
 ///
 /// assert!(matches!(request.query, Query::Match(_)));
-/// assert_eq!(request.filters.len(), 2);
+/// assert_eq!(request.filters.len(), 1);
+/// assert_eq!(request.sort.len(), 1);
+/// assert_eq!(request.aggregations.len(), 1);
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchRequest {
@@ -31,6 +37,12 @@ pub struct SearchRequest {
     /// Additional filter constraints applied before ranking.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filters: Vec<Query>,
+    /// Sort specifications for ordering results.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sort: Vec<SortField>,
+    /// Aggregations for computing summary metrics.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aggregations: Vec<Aggregation>,
 }
 
 #[cfg(test)]
@@ -42,6 +54,8 @@ mod tests {
         let req = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "hello")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         assert!(req.filters.is_empty());
     }
@@ -54,6 +68,8 @@ mod tests {
                 Query::Term(TermQuery::new("category", "electronics")),
                 Query::Range(RangeQuery::new("price").with_lte(1000.0)),
             ],
+            sort: vec![],
+            aggregations: vec![],
         };
         assert_eq!(req.filters.len(), 2);
     }
@@ -65,6 +81,8 @@ mod tests {
             filters: vec![
                 Query::Term(TermQuery::new("category", "electronics")),
             ],
+            sort: vec![],
+            aggregations: vec![],
         };
         let json = serde_json::to_string(&req).unwrap();
         let deserialized: SearchRequest = serde_json::from_str(&json).unwrap();
@@ -76,6 +94,8 @@ mod tests {
         let req = SearchRequest {
             query: Query::Match(MatchQuery::new("title", "test")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(!json.contains("filters"));
@@ -86,6 +106,8 @@ mod tests {
         let req = SearchRequest {
             query: Query::Match(MatchQuery::new("f", "v")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let debug = format!("{req:?}");
         assert!(debug.contains("f"));
@@ -97,6 +119,8 @@ mod tests {
         let a = SearchRequest {
             query: Query::Match(MatchQuery::new("t", "v")),
             filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
         };
         let b = a.clone();
         assert_eq!(a, b);

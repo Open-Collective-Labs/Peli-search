@@ -1,0 +1,5 @@
+# PeliSearch server configuration
+host = "0.0.0.0"
+port = 7700
+data_path = "./data"
+log_level = "info"

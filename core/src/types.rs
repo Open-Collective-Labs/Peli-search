@@ -1,4 +1,6 @@
-use crate::ranking::explanation::ScoreExplanation;
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 /// A single search result entry.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +43,7 @@ impl SearchResult {
 /// assert_eq!(hit.document_id, "doc1");
 /// assert!((hit.score - 7.42).abs() < 1e-10);
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHit {
     /// The name of the index that matched.
     pub index: String,
@@ -62,22 +64,37 @@ impl SearchHit {
     }
 }
 
-/// A search response containing results and per-document explanations.
-#[derive(Debug, Clone, PartialEq)]
+/// Aggregation results keyed by aggregation name (field name).
+pub type AggregationResults = HashMap<String, serde_json::Value>;
+
+/// A search response containing hits and aggregation results.
+///
+/// # Examples
+///
+/// ```
+/// use pelisearch_core::types::{SearchHit, SearchResponse, AggregationResults};
+///
+/// let hits = vec![
+///     SearchHit::new("products", "doc1", 0.95),
+///     SearchHit::new("products", "doc2", 0.80),
+/// ];
+/// let aggs = AggregationResults::new();
+/// let response = SearchResponse::new(hits, aggs);
+/// assert_eq!(response.hits.len(), 2);
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResponse {
-    /// Ranked search results.
-    pub results: Vec<SearchResult>,
-    /// Per-document score explanations keyed by document ID.
-    pub explanations: Vec<(String, Vec<ScoreExplanation>)>,
+    /// Ranked search hits.
+    pub hits: Vec<SearchHit>,
+    /// Aggregation results keyed by aggregation name.
+    #[serde(default)]
+    pub aggregations: AggregationResults,
 }
 
 impl SearchResponse {
     /// Create a new `SearchResponse`.
-    pub fn new(results: Vec<SearchResult>, explanations: Vec<(String, Vec<ScoreExplanation>)>) -> Self {
-        Self {
-            results,
-            explanations,
-        }
+    pub fn new(hits: Vec<SearchHit>, aggregations: AggregationResults) -> Self {
+        Self { hits, aggregations }
     }
 }
 
@@ -135,10 +152,21 @@ mod tests {
 
     #[test]
     fn search_response_creation() {
-        let results = vec![SearchResult::new("doc1", 1.0)];
-        let explanations = vec![("doc1".to_string(), vec![])];
-        let response = SearchResponse::new(results.clone(), explanations.clone());
-        assert_eq!(response.results, results);
-        assert_eq!(response.explanations, explanations);
+        let hits = vec![SearchHit::new("idx", "doc1", 1.0)];
+        let aggs = AggregationResults::new();
+        let response = SearchResponse::new(hits.clone(), aggs);
+        assert_eq!(response.hits, hits);
+        assert!(response.aggregations.is_empty());
+    }
+
+    #[test]
+    fn search_response_serde() {
+        let response = SearchResponse {
+            hits: vec![SearchHit::new("idx", "doc1", 0.5)],
+            aggregations: AggregationResults::new(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        let deserialized: SearchResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(response, deserialized);
     }
 }
