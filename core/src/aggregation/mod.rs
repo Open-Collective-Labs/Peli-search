@@ -4,6 +4,7 @@ pub mod terms;
 
 pub use aggregation::Aggregation;
 pub use metrics::{
-    AverageAggregation, CountAggregation, MaxAggregation, MinAggregation, SumAggregation,
+    AverageAggregation, AverageResult, CountAggregation, CountResult, MaxAggregation, MaxResult,
+    MinAggregation, MinResult, SumAggregation, SumResult,
 };
 pub use terms::{TermsAggregation, TermsBucket};
