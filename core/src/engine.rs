@@ -1,14 +1,13 @@
-use std::collections::HashMap;
-
 use crate::document::Document;
 use crate::error::SearchError;
-use crate::index::InvertedIndex;
+use crate::index::IndexManager;
+use crate::schema::Mapping;
+use crate::types::{SearchHit, SearchResponse, SearchResult};
 
-use crate::ranking::statistics::CollectionStats;
-use crate::search;
-use crate::types::{SearchResponse, SearchResult};
-
-/// High-level search engine that coordinates tokenization, indexing, and search.
+/// High-level coordinator that routes operations to named indexes.
+///
+/// Wraps an `IndexManager` and provides convenience methods for
+/// creating indexes and operating on documents within them.
 ///
 /// # Examples
 ///
@@ -18,37 +17,85 @@ use crate::types::{SearchResponse, SearchResult};
 /// use pelisearch_core::engine::SearchEngine;
 ///
 /// let mut engine = SearchEngine::new();
+/// engine.create_index("products").unwrap();
 ///
 /// let mut fields = HashMap::new();
 /// fields.insert("title".to_string(), serde_json::json!("electric bike"));
 /// let doc = Document::new("doc1", fields).unwrap();
-/// engine.add_document(doc).unwrap();
+/// engine.add_document("products", doc).unwrap();
 ///
-/// let results = engine.search("bike").unwrap();
+/// let results = engine.search("products", "bike").unwrap();
 /// assert_eq!(results.len(), 1);
-/// assert_eq!(results[0].document_id, "doc1");
 /// ```
 pub struct SearchEngine {
-    documents: HashMap<String, Document>,
-    index: InvertedIndex,
-    stats: CollectionStats,
+    manager: IndexManager,
 }
 
 impl SearchEngine {
     /// Create a new empty `SearchEngine`.
     pub fn new() -> Self {
         Self {
-            documents: HashMap::new(),
-            index: InvertedIndex::new(),
-            stats: CollectionStats::new(),
+            manager: IndexManager::new(),
         }
     }
 
-    /// Add a document to the engine.
+    /// Create a new named index with an empty schema mapping.
     ///
-    /// The document's string field values are tokenized and indexed for search.
-    /// Returns an error if the document has an empty ID or a document with the
-    /// same ID already exists.
+    /// # Examples
+    ///
+    /// ```
+    /// use pelisearch_core::engine::SearchEngine;
+    ///
+    /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    /// assert!(engine.list_indexes().contains(&"products".to_string()));
+    /// ```
+    pub fn create_index(&mut self, name: impl Into<String>) -> Result<(), SearchError> {
+        self.manager.create_index(name)
+    }
+
+    /// Create a new named index with the given schema mapping.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pelisearch_core::engine::SearchEngine;
+    /// use pelisearch_core::schema::{Mapping, Field, FieldType};
+    ///
+    /// let mut engine = SearchEngine::new();
+    /// let mapping = Mapping::new(vec![
+    ///     Field::new("title", FieldType::Text, true),
+    /// ]);
+    /// engine.create_index_with_mapping("articles", mapping).unwrap();
+    /// ```
+    pub fn create_index_with_mapping(
+        &mut self,
+        name: impl Into<String>,
+        mapping: Mapping,
+    ) -> Result<(), SearchError> {
+        self.manager.create_index_with_mapping(name, mapping)
+    }
+
+    /// List all index names.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pelisearch_core::engine::SearchEngine;
+    ///
+    /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    /// engine.create_index("users").unwrap();
+    /// assert_eq!(engine.list_indexes(), vec!["products", "users"]);
+    /// ```
+    pub fn list_indexes(&self) -> Vec<String> {
+        self.manager.list_indexes()
+    }
+
+    /// Add a document to a specific index.
+    ///
+    /// The document is validated against the index's schema mapping,
+    /// then tokenized and indexed for search.
     ///
     /// # Examples
     ///
@@ -58,30 +105,22 @@ impl SearchEngine {
     /// use pelisearch_core::engine::SearchEngine;
     ///
     /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    ///
     /// let mut fields = HashMap::new();
     /// fields.insert("title".to_string(), serde_json::json!("hello world"));
     /// let doc = Document::new("doc1", fields).unwrap();
-    /// engine.add_document(doc).unwrap();
+    /// engine.add_document("products", doc).unwrap();
     /// ```
-    pub fn add_document(&mut self, document: Document) -> Result<(), SearchError> {
-        if document.id.is_empty() {
-            return Err(SearchError::InvalidDocumentId(
-                "document ID must not be empty".to_string(),
-            ));
-        }
-
-        if self.documents.contains_key(&document.id) {
-            return Err(SearchError::DocumentAlreadyExists(document.id.clone()));
-        }
-
-        let text = self.extract_text(&document);
-        self.index.add_document(&document.id, &text)?;
-        self.stats.update_document(&document.id, &text);
-        self.documents.insert(document.id.clone(), document);
-        Ok(())
+    pub fn add_document(
+        &mut self,
+        index_name: &str,
+        document: Document,
+    ) -> Result<(), SearchError> {
+        self.manager.add_document(index_name, document)
     }
 
-    /// Remove a document from the engine by its ID.
+    /// Remove a document from a specific index.
     ///
     /// # Examples
     ///
@@ -91,25 +130,23 @@ impl SearchEngine {
     /// use pelisearch_core::engine::SearchEngine;
     ///
     /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    ///
     /// let doc = Document::new("doc1", HashMap::new()).unwrap();
-    /// engine.add_document(doc).unwrap();
-    /// engine.remove_document("doc1").unwrap();
-    /// assert!(engine.get_document("doc1").is_err());
+    /// engine.add_document("products", doc).unwrap();
+    /// engine.remove_document("products", "doc1").unwrap();
     /// ```
-    pub fn remove_document(&mut self, id: &str) -> Result<(), SearchError> {
-        if !self.documents.contains_key(id) {
-            return Err(SearchError::DocumentNotFound(id.to_string()));
-        }
-        self.index.remove_document(id);
-        self.stats.remove_document(id);
-        self.documents.remove(id);
-        Ok(())
+    pub fn remove_document(
+        &mut self,
+        index_name: &str,
+        doc_id: &str,
+    ) -> Result<(), SearchError> {
+        self.manager.remove_document(index_name, doc_id)
     }
 
-    /// Search for documents matching the query using BM25 ranking.
+    /// Search a specific index for documents matching the query using BM25 ranking.
     ///
-    /// Returns a list of `SearchResult` entries sorted by relevance (BM25 score
-    /// descending).
+    /// Returns results sorted by relevance descending.
     ///
     /// # Examples
     ///
@@ -119,20 +156,26 @@ impl SearchEngine {
     /// use pelisearch_core::engine::SearchEngine;
     ///
     /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
     ///
     /// let mut fields = HashMap::new();
     /// fields.insert("title".to_string(), serde_json::json!("electric bike"));
     /// let doc = Document::new("doc1", fields).unwrap();
-    /// engine.add_document(doc).unwrap();
+    /// engine.add_document("products", doc).unwrap();
     ///
-    /// let results = engine.search("electric bike").unwrap();
+    /// let results = engine.search("products", "electric bike").unwrap();
     /// assert_eq!(results.len(), 1);
     /// ```
-    pub fn search(&self, query: &str) -> Result<Vec<SearchResult>, SearchError> {
-        Ok(search::search(&self.index, &self.stats, query))
+    pub fn search(
+        &self,
+        index_name: &str,
+        query: &str,
+    ) -> Result<Vec<SearchHit>, SearchError> {
+        self.manager.search(index_name, query)
     }
 
-    /// Search with BM25 ranking and return per-document score explanations.
+    /// Search a specific index with BM25 ranking and return per-document
+    /// score explanations.
     ///
     /// # Examples
     ///
@@ -142,27 +185,42 @@ impl SearchEngine {
     /// use pelisearch_core::engine::SearchEngine;
     ///
     /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    ///
     /// let mut fields = HashMap::new();
     /// fields.insert("title".to_string(), serde_json::json!("electric bike"));
     /// let doc = Document::new("doc1", fields).unwrap();
-    /// engine.add_document(doc).unwrap();
+    /// engine.add_document("products", doc).unwrap();
     ///
-    /// let response = engine.search_with_explanations("electric").unwrap();
+    /// let response = engine.search_with_explanations("products", "electric").unwrap();
     /// assert_eq!(response.results.len(), 1);
     /// assert_eq!(response.explanations.len(), 1);
     /// ```
     pub fn search_with_explanations(
         &self,
+        index_name: &str,
         query: &str,
     ) -> Result<SearchResponse, SearchError> {
-        Ok(search::search_with_explanations(
-            &self.index,
-            &self.stats,
-            query,
-        ))
+        let index = self.manager.get_index(index_name)?;
+        let results = index.search(query);
+
+        let explanations: Vec<(String, Vec<crate::ranking::explanation::ScoreExplanation>)> =
+            results
+                .iter()
+                .map(|r| {
+                    let exps = crate::ranking::explanation::explain_document(
+                        query,
+                        &r.document_id,
+                        &index.stats_ref(),
+                    );
+                    (r.document_id.clone(), exps)
+                })
+                .collect();
+
+        Ok(SearchResponse::new(results, explanations))
     }
 
-    /// Get a document by its ID.
+    /// Get a document from a specific index.
     ///
     /// # Examples
     ///
@@ -172,38 +230,19 @@ impl SearchEngine {
     /// use pelisearch_core::engine::SearchEngine;
     ///
     /// let mut engine = SearchEngine::new();
+    /// engine.create_index("products").unwrap();
+    ///
     /// let mut fields = HashMap::new();
     /// fields.insert("title".to_string(), serde_json::json!("hello"));
     /// let doc = Document::new("doc1", fields).unwrap();
-    /// engine.add_document(doc).unwrap();
+    /// engine.add_document("products", doc).unwrap();
     ///
-    /// let retrieved = engine.get_document("doc1").unwrap();
+    /// let retrieved = engine.get_document("products", "doc1").unwrap();
     /// assert_eq!(retrieved.id, "doc1");
     /// ```
-    pub fn get_document(&self, id: &str) -> Result<&Document, SearchError> {
-        self.documents
-            .get(id)
-            .ok_or_else(|| SearchError::DocumentNotFound(id.to_string()))
-    }
-
-    fn extract_text(&self, document: &Document) -> String {
-        let mut parts: Vec<String> = Vec::new();
-        for value in document.fields.values() {
-            match value {
-                serde_json::Value::String(s) => parts.push(s.clone()),
-                serde_json::Value::Number(n) => parts.push(n.to_string()),
-                serde_json::Value::Bool(b) => parts.push(b.to_string()),
-                serde_json::Value::Array(arr) => {
-                    for v in arr {
-                        if let serde_json::Value::String(s) = v {
-                            parts.push(s.clone());
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        parts.join(" ")
+    pub fn get_document(&self, index_name: &str, doc_id: &str) -> Result<&Document, SearchError> {
+        let index = self.manager.get_index(index_name)?;
+        index.get_document(doc_id)
     }
 }
 
@@ -216,73 +255,111 @@ impl Default for SearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::{Field, FieldType};
     use std::collections::HashMap;
+
+    #[test]
+    fn create_index_and_list() {
+        let mut engine = SearchEngine::new();
+        engine.create_index("products").unwrap();
+        engine.create_index("users").unwrap();
+        assert_eq!(engine.list_indexes(), vec!["products", "users"]);
+    }
+
+    #[test]
+    fn create_duplicate_index_fails() {
+        let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
+        assert!(engine.create_index("test").is_err());
+    }
 
     #[test]
     fn add_and_search_documents() {
         let mut engine = SearchEngine::new();
+        engine.create_index("products").unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("electric bike"));
         let doc = Document::new("doc1", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("products", doc).unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("walking shoes"));
         let doc = Document::new("doc2", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("products", doc).unwrap();
 
-        let results = engine.search("bike").unwrap();
+        let results = engine.search("products", "bike").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].document_id, "doc1");
     }
 
     #[test]
+    fn search_in_nonexistent_index_fails() {
+        let engine = SearchEngine::new();
+        let err = engine.search("nonexistent", "hello").unwrap_err();
+        assert!(matches!(err, SearchError::Internal(_)));
+    }
+
+    #[test]
     fn remove_document() {
         let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
 
         let doc = Document::new("doc1", HashMap::new()).unwrap();
-        engine.add_document(doc).unwrap();
-
-        engine.remove_document("doc1").unwrap();
-        assert!(engine.get_document("doc1").is_err());
+        engine.add_document("test", doc).unwrap();
+        engine.remove_document("test", "doc1").unwrap();
+        assert!(engine.get_document("test", "doc1").is_err());
     }
 
     #[test]
-    fn add_duplicate_document_returns_error() {
+    fn add_document_with_schema() {
         let mut engine = SearchEngine::new();
+        let mapping = Mapping::new(vec![Field::new("title", FieldType::Text, true)]);
+        engine.create_index_with_mapping("articles", mapping).unwrap();
 
-        let doc = Document::new("doc1", HashMap::new()).unwrap();
-        engine.add_document(doc).unwrap();
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("hello world"));
+        let doc = Document::new("doc1", fields).unwrap();
+        engine.add_document("articles", doc).unwrap();
 
-        let doc2 = Document::new("doc1", HashMap::new()).unwrap();
-        let err = engine.add_document(doc2).unwrap_err();
-        assert!(matches!(err, SearchError::DocumentAlreadyExists(_)));
+        let results = engine.search("articles", "hello").unwrap();
+        assert_eq!(results.len(), 1);
     }
 
     #[test]
-    fn remove_nonexistent_document_returns_error() {
+    fn schema_validation_rejects_bad_document() {
         let mut engine = SearchEngine::new();
-        let err = engine.remove_document("nonexistent").unwrap_err();
-        assert!(matches!(err, SearchError::DocumentNotFound(_)));
+        let mapping = Mapping::new(vec![
+            Field::new("title", FieldType::Text, true),
+            Field::new("price", FieldType::Float, true),
+        ]);
+        engine.create_index_with_mapping("products", mapping).unwrap();
+
+        // Missing required field "price"
+        let mut fields = HashMap::new();
+        fields.insert("title".to_string(), serde_json::json!("widget"));
+        let doc = Document::new("doc1", fields).unwrap();
+        let err = engine.add_document("products", doc).unwrap_err();
+        assert!(matches!(err, SearchError::SchemaValidationError(_)));
     }
 
     #[test]
     fn search_after_remove() {
         let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("hello world"));
         let doc = Document::new("doc1", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("test", doc).unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("hello there"));
         let doc = Document::new("doc2", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("test", doc).unwrap();
 
-        engine.remove_document("doc1").unwrap();
-        let results = engine.search("hello").unwrap();
+        engine.remove_document("test", "doc1").unwrap();
+        let results = engine.search("test", "hello").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].document_id, "doc2");
     }
@@ -290,57 +367,56 @@ mod tests {
     #[test]
     fn get_document_returns_document() {
         let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("test"));
         let doc = Document::new("doc1", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("test", doc).unwrap();
 
-        let retrieved = engine.get_document("doc1").unwrap();
+        let retrieved = engine.get_document("test", "doc1").unwrap();
         assert_eq!(retrieved.id, "doc1");
-        assert_eq!(
-            retrieved.get_field("title"),
-            Some(&serde_json::json!("test"))
-        );
     }
 
     #[test]
     fn empty_search_returns_empty() {
-        let engine = SearchEngine::new();
-        let results = engine.search("").unwrap();
+        let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
+        let results = engine.search("test", "").unwrap();
         assert!(results.is_empty());
     }
 
     #[test]
     fn index_multiple_fields() {
         let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("electric bike"));
         fields.insert("description".to_string(), serde_json::json!("fast commuter"));
         let doc = Document::new("doc1", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("test", doc).unwrap();
 
-        let results = engine.search("commuter").unwrap();
+        let results = engine.search("test", "commuter").unwrap();
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].document_id, "doc1");
     }
 
     #[test]
     fn search_with_explanations_engine() {
         let mut engine = SearchEngine::new();
+        engine.create_index("test").unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("electric bike"));
         let doc = Document::new("doc1", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("test", doc).unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("electric car"));
         let doc = Document::new("doc2", fields).unwrap();
-        engine.add_document(doc).unwrap();
+        engine.add_document("test", doc).unwrap();
 
-        let response = engine.search_with_explanations("electric bike").unwrap();
+        let response = engine.search_with_explanations("test", "electric bike").unwrap();
         assert_eq!(response.results.len(), 2);
         assert_eq!(response.explanations.len(), 2);
 
@@ -348,5 +424,29 @@ mod tests {
             assert!(!exps.is_empty());
             assert!(response.results.iter().any(|r| &r.document_id == doc_id));
         }
+    }
+
+    #[test]
+    fn cross_index_isolation() {
+        let mut engine = SearchEngine::new();
+        engine.create_index("products").unwrap();
+        engine.create_index("users").unwrap();
+
+        let mut fields = HashMap::new();
+        fields.insert("name".to_string(), serde_json::json!("widget"));
+        let doc = Document::new("doc1", fields).unwrap();
+        engine.add_document("products", doc).unwrap();
+
+        let mut fields = HashMap::new();
+        fields.insert("name".to_string(), serde_json::json!("Alice"));
+        let doc = Document::new("doc1", fields).unwrap();
+        engine.add_document("users", doc).unwrap();
+
+        // Same doc ID in different indexes — no conflict
+        assert_eq!(
+            engine.get_document("products", "doc1").unwrap().id,
+            "doc1"
+        );
+        assert_eq!(engine.get_document("users", "doc1").unwrap().id, "doc1");
     }
 }

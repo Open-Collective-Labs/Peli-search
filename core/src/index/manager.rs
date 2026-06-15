@@ -4,7 +4,7 @@ use crate::document::Document;
 use crate::error::SearchError;
 use crate::index::Index;
 use crate::schema::Mapping;
-use crate::types::SearchResult;
+use crate::types::SearchHit;
 
 /// Manages multiple named indexes.
 ///
@@ -230,9 +230,13 @@ impl IndexManager {
         &self,
         index_name: &str,
         query: &str,
-    ) -> Result<Vec<SearchResult>, SearchError> {
+    ) -> Result<Vec<SearchHit>, SearchError> {
         let index = self.get_index(index_name)?;
-        Ok(index.search(query))
+        let results = index.search(query);
+        Ok(results
+            .into_iter()
+            .map(|r| SearchHit::new(index_name, r.document_id, r.score))
+            .collect())
     }
 }
 
