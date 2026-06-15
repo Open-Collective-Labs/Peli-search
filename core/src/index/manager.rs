@@ -15,17 +15,12 @@ use crate::types::SearchResult;
 ///
 /// ```
 /// use pelisearch_core::index::IndexManager;
-/// use pelisearch_core::schema::{Mapping, Field, FieldType};
 ///
 /// let mut manager = IndexManager::new();
+/// manager.create_index("products").unwrap();
+/// manager.create_index("articles").unwrap();
 ///
-/// let product_mapping = Mapping::new(vec![
-///     Field::new("title", FieldType::Text, true),
-/// ]);
-/// manager.create_index("products", product_mapping).unwrap();
-///
-/// assert!(manager.index_exists("products"));
-/// assert!(!manager.index_exists("nonexistent"));
+/// assert_eq!(manager.list_indexes(), vec!["articles", "products"]);
 /// ```
 pub struct IndexManager {
     indexes: HashMap<String, Index>,
@@ -39,7 +34,7 @@ impl IndexManager {
         }
     }
 
-    /// Create a new named index with the given mapping.
+    /// Create a new named index with an empty schema mapping.
     ///
     /// Returns an error if an index with the same name already exists.
     ///
@@ -47,12 +42,40 @@ impl IndexManager {
     ///
     /// ```
     /// use pelisearch_core::index::IndexManager;
-    /// use pelisearch_core::schema::Mapping;
     ///
     /// let mut manager = IndexManager::new();
-    /// manager.create_index("products", Mapping::new(vec![])).unwrap();
+    /// manager.create_index("products").unwrap();
+    /// assert!(manager.get_index("products").is_ok());
     /// ```
-    pub fn create_index(
+    pub fn create_index(&mut self, name: impl Into<String>) -> Result<(), SearchError> {
+        let name: String = name.into();
+        if self.indexes.contains_key(&name) {
+            return Err(SearchError::Internal(format!(
+                "index '{name}' already exists"
+            )));
+        }
+        self.indexes
+            .insert(name.clone(), Index::new(name, Mapping::new(vec![])));
+        Ok(())
+    }
+
+    /// Create a new named index with the given schema mapping.
+    ///
+    /// Returns an error if an index with the same name already exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pelisearch_core::index::IndexManager;
+    /// use pelisearch_core::schema::{Mapping, Field, FieldType};
+    ///
+    /// let mut manager = IndexManager::new();
+    /// let mapping = Mapping::new(vec![
+    ///     Field::new("title", FieldType::Text, true),
+    /// ]);
+    /// manager.create_index_with_mapping("products", mapping).unwrap();
+    /// ```
+    pub fn create_index_with_mapping(
         &mut self,
         name: impl Into<String>,
         mapping: Mapping,
@@ -67,16 +90,41 @@ impl IndexManager {
         Ok(())
     }
 
-    /// Get a reference to an index by name.
+    /// Delete (remove) an index by name.
+    ///
+    /// Returns an error if the index does not exist.
     ///
     /// # Examples
     ///
     /// ```
     /// use pelisearch_core::index::IndexManager;
-    /// use pelisearch_core::schema::Mapping;
     ///
     /// let mut manager = IndexManager::new();
-    /// manager.create_index("products", Mapping::new(vec![])).unwrap();
+    /// manager.create_index("products").unwrap();
+    /// manager.delete_index("products").unwrap();
+    /// assert!(!manager.get_index("products").is_ok());
+    /// ```
+    pub fn delete_index(&mut self, name: &str) -> Result<(), SearchError> {
+        if !self.indexes.contains_key(name) {
+            return Err(SearchError::Internal(format!(
+                "index '{name}' not found"
+            )));
+        }
+        self.indexes.remove(name);
+        Ok(())
+    }
+
+    /// Get a reference to an index by name.
+    ///
+    /// Returns an error if the index does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pelisearch_core::index::IndexManager;
+    ///
+    /// let mut manager = IndexManager::new();
+    /// manager.create_index("products").unwrap();
     /// let index = manager.get_index("products").unwrap();
     /// assert_eq!(index.name(), "products");
     /// ```
@@ -87,6 +135,8 @@ impl IndexManager {
     }
 
     /// Get a mutable reference to an index by name.
+    ///
+    /// Returns an error if the index does not exist.
     pub fn get_index_mut(&mut self, name: &str) -> Result<&mut Index, SearchError> {
         self.indexes
             .get_mut(name)
@@ -94,43 +144,28 @@ impl IndexManager {
     }
 
     /// Check whether an index exists.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pelisearch_core::index::IndexManager;
-    /// use pelisearch_core::schema::Mapping;
-    ///
-    /// let mut manager = IndexManager::new();
-    /// manager.create_index("products", Mapping::new(vec![])).unwrap();
-    /// assert!(manager.index_exists("products"));
-    /// assert!(!manager.index_exists("users"));
-    /// ```
     pub fn index_exists(&self, name: &str) -> bool {
         self.indexes.contains_key(name)
     }
 
-    /// Remove an index by name.
+    /// List all index names managed by this manager, sorted alphabetically.
     ///
     /// # Examples
     ///
     /// ```
     /// use pelisearch_core::index::IndexManager;
-    /// use pelisearch_core::schema::Mapping;
     ///
     /// let mut manager = IndexManager::new();
-    /// manager.create_index("products", Mapping::new(vec![])).unwrap();
-    /// manager.drop_index("products").unwrap();
-    /// assert!(!manager.index_exists("products"));
+    /// manager.create_index("z_products").unwrap();
+    /// manager.create_index("a_articles").unwrap();
+    ///
+    /// let names = manager.list_indexes();
+    /// assert_eq!(names, vec!["a_articles", "z_products"]);
     /// ```
-    pub fn drop_index(&mut self, name: &str) -> Result<(), SearchError> {
-        if !self.indexes.contains_key(name) {
-            return Err(SearchError::Internal(format!(
-                "index '{name}' not found"
-            )));
-        }
-        self.indexes.remove(name);
-        Ok(())
+    pub fn list_indexes(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.indexes.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     /// Add a document to a specific index.
@@ -141,10 +176,9 @@ impl IndexManager {
     /// use std::collections::HashMap;
     /// use pelisearch_core::document::Document;
     /// use pelisearch_core::index::IndexManager;
-    /// use pelisearch_core::schema::Mapping;
     ///
     /// let mut manager = IndexManager::new();
-    /// manager.create_index("products", Mapping::new(vec![])).unwrap();
+    /// manager.create_index("products").unwrap();
     ///
     /// let doc = Document::new("doc1", HashMap::new()).unwrap();
     /// manager.add_document("products", doc).unwrap();
@@ -182,7 +216,7 @@ impl IndexManager {
     /// let mapping = Mapping::new(vec![
     ///     Field::new("title", FieldType::Text, true),
     /// ]);
-    /// manager.create_index("products", mapping).unwrap();
+    /// manager.create_index_with_mapping("products", mapping).unwrap();
     ///
     /// let mut fields = HashMap::new();
     /// fields.insert("title".to_string(), serde_json::json!("electric bike"));
@@ -200,13 +234,6 @@ impl IndexManager {
         let index = self.get_index(index_name)?;
         Ok(index.search(query))
     }
-
-    /// List all index names managed by this manager.
-    pub fn index_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self.indexes.keys().cloned().collect();
-        names.sort();
-        names
-    }
 }
 
 impl Default for IndexManager {
@@ -221,28 +248,36 @@ mod tests {
     use crate::schema::{Field, FieldType};
 
     #[test]
+    fn create_with_default_mapping() {
+        let mut manager = IndexManager::new();
+        manager.create_index("products").unwrap();
+        assert!(manager.index_exists("products"));
+        assert!(manager.get_index("products").unwrap().mapping().fields().is_empty());
+    }
+
+    #[test]
+    fn create_with_custom_mapping() {
+        let mut manager = IndexManager::new();
+        let mapping = Mapping::new(vec![Field::new("title", FieldType::Text, true)]);
+        manager
+            .create_index_with_mapping("products", mapping)
+            .unwrap();
+        assert!(manager.get_index("products").unwrap().mapping().field_exists("title"));
+    }
+
+    #[test]
     fn create_and_list_indexes() {
         let mut manager = IndexManager::new();
-        manager
-            .create_index("products", Mapping::new(vec![]))
-            .unwrap();
-        manager
-            .create_index("users", Mapping::new(vec![]))
-            .unwrap();
-
-        let names = manager.index_names();
-        assert_eq!(names, vec!["products", "users"]);
+        manager.create_index("products").unwrap();
+        manager.create_index("users").unwrap();
+        assert_eq!(manager.list_indexes(), vec!["products", "users"]);
     }
 
     #[test]
     fn create_duplicate_index_fails() {
         let mut manager = IndexManager::new();
-        manager
-            .create_index("products", Mapping::new(vec![]))
-            .unwrap();
-        let err = manager
-            .create_index("products", Mapping::new(vec![]))
-            .unwrap_err();
+        manager.create_index("products").unwrap();
+        let err = manager.create_index("products").unwrap_err();
         assert!(matches!(err, SearchError::Internal(_)));
     }
 
@@ -254,27 +289,41 @@ mod tests {
     }
 
     #[test]
-    fn drop_index() {
+    fn delete_index() {
         let mut manager = IndexManager::new();
-        manager
-            .create_index("products", Mapping::new(vec![]))
-            .unwrap();
-        manager.drop_index("products").unwrap();
+        manager.create_index("products").unwrap();
+        manager.delete_index("products").unwrap();
         assert!(!manager.index_exists("products"));
+        assert!(manager.list_indexes().is_empty());
     }
 
     #[test]
-    fn drop_nonexistent_index_fails() {
+    fn delete_nonexistent_index_fails() {
         let mut manager = IndexManager::new();
-        let err = manager.drop_index("nonexistent").unwrap_err();
+        let err = manager.delete_index("nonexistent").unwrap_err();
         assert!(matches!(err, SearchError::Internal(_)));
+    }
+
+    #[test]
+    fn list_indexes_empty() {
+        let manager = IndexManager::new();
+        assert!(manager.list_indexes().is_empty());
+    }
+
+    #[test]
+    fn list_indexes_sorted() {
+        let mut manager = IndexManager::new();
+        manager.create_index("zebra").unwrap();
+        manager.create_index("apple").unwrap();
+        manager.create_index("mango").unwrap();
+        assert_eq!(manager.list_indexes(), vec!["apple", "mango", "zebra"]);
     }
 
     #[test]
     fn add_and_search_documents_through_manager() {
         let mut manager = IndexManager::new();
         let mapping = Mapping::new(vec![Field::new("title", FieldType::Text, true)]);
-        manager.create_index("products", mapping).unwrap();
+        manager.create_index_with_mapping("products", mapping).unwrap();
 
         let mut fields = HashMap::new();
         fields.insert("title".to_string(), serde_json::json!("electric bike"));
@@ -292,5 +341,25 @@ mod tests {
         let doc = Document::new("doc1", HashMap::new()).unwrap();
         let err = manager.add_document("nonexistent", doc).unwrap_err();
         assert!(matches!(err, SearchError::Internal(_)));
+    }
+
+    #[test]
+    fn remove_document_through_manager() {
+        let mut manager = IndexManager::new();
+        manager.create_index("test").unwrap();
+
+        let doc = Document::new("doc1", HashMap::new()).unwrap();
+        manager.add_document("test", doc).unwrap();
+        manager.remove_document("test", "doc1").unwrap();
+        assert!(manager.get_index("test").unwrap().get_document("doc1").is_err());
+    }
+
+    #[test]
+    fn search_after_delete_recreate() {
+        let mut manager = IndexManager::new();
+        manager.create_index("test").unwrap();
+        manager.delete_index("test").unwrap();
+        manager.create_index("test").unwrap();
+        assert!(manager.index_exists("test"));
     }
 }
