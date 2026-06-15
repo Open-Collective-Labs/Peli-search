@@ -11,6 +11,8 @@ pub enum SearchError {
     DocumentNotFound(String),
     /// An internal error occurred.
     Internal(String),
+    /// A document failed schema validation.
+    SchemaValidationError(String),
 }
 
 impl fmt::Display for SearchError {
@@ -20,6 +22,7 @@ impl fmt::Display for SearchError {
             Self::DocumentAlreadyExists(id) => write!(f, "document '{id}' already exists"),
             Self::DocumentNotFound(id) => write!(f, "document '{id}' not found"),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
+            Self::SchemaValidationError(msg) => write!(f, "schema validation error: {msg}"),
         }
     }
 }
