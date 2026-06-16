@@ -48,6 +48,12 @@ pub struct ServerConfig {
     #[serde(default = "default_rpm")]
     pub rate_limit_requests_per_minute: u64,
 
+    // ---- S-7: Request Body Size ----
+
+    /// Maximum request body size in bytes (default: 10 MB).
+    #[serde(default = "default_max_body_size")]
+    pub max_body_size: usize,
+
     // ---- S-6: CORS ----
 
     /// Enable CORS support.
@@ -99,6 +105,10 @@ fn default_flush_interval_ms() -> u64 {
     1000
 }
 
+fn default_max_body_size() -> usize {
+    10 * 1024 * 1024
+}
+
 fn default_cors_origins() -> Vec<String> {
     vec!["*".into()]
 }
@@ -127,6 +137,7 @@ impl Default for ServerConfig {
             cors_origins: default_cors_origins(),
             cors_methods: default_cors_methods(),
             cors_headers: default_cors_headers(),
+            max_body_size: default_max_body_size(),
             cors_credentials: false,
         }
     }
@@ -179,6 +190,10 @@ struct CliArgs {
     /// Enable/disable CORS (overrides config file).
     #[arg(long)]
     cors_enabled: Option<bool>,
+
+    /// Maximum request body size in bytes (overrides config file).
+    #[arg(long)]
+    max_body_size: Option<usize>,
 }
 
 /// Load the effective configuration by merging CLI args over a config file.
@@ -233,6 +248,10 @@ pub fn load_config() -> Result<ServerConfig, String> {
     }
     if let Some(enabled) = cli.cors_enabled {
         config.cors_enabled = enabled;
+    }
+
+    if let Some(size) = cli.max_body_size {
+        config.max_body_size = size;
     }
 
     Ok(config)

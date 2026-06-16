@@ -96,6 +96,8 @@ export interface SearchRequest {
 export interface ClientOptions {
   /** Base URL, e.g. `http://localhost:7700`. Defaults to `http://localhost:7700`. */
   host?: string
+  /** API key for authenticated endpoints. Sent as `X-Api-Key` header. */
+  apiKey?: string
 }
 
 export type RequestFn = <T>(method: string, path: string, body?: unknown) => Promise<T>

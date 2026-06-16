@@ -49,7 +49,13 @@ async fn main() {
     };
 
     // Build the router
-    let app = routes::build_router(state, &config);
+    let app = match routes::build_router(state.clone(), &config) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
 
     // Bind and serve
     let addr = SocketAddr::new(

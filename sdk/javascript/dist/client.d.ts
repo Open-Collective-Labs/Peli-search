@@ -21,6 +21,13 @@ export declare class PeliSearchClient {
     search(index: string, query: SearchRequest): Promise<SearchResponse>;
     health(): Promise<void>;
     ready(): Promise<void>;
+    metrics(): Promise<{
+        request_count: number;
+        search_count: number;
+        total_latency_ns: number;
+        document_count: number;
+        index_count: number;
+    }>;
     private static doFetch;
 }
 //# sourceMappingURL=client.d.ts.map

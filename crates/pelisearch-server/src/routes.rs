@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, Method};
 use axum::middleware;
 use axum::routing::{delete, get, post};
@@ -12,24 +13,33 @@ use crate::middleware::{auth, logging, metrics, rate_limit, request_id};
 use crate::state::SharedState;
 
 /// Build the application router with all registered routes.
-pub fn build_router(state: SharedState, config: &ServerConfig) -> Router {
+pub fn build_router(state: SharedState, config: &ServerConfig) -> Result<Router, String> {
     // ---- S-6: CORS ----
     let cors = if config.cors_enabled {
         let origins: Vec<_> = config
             .cors_origins
             .iter()
-            .map(|o| o.parse().unwrap())
-            .collect();
+            .map(|o| o.parse().map_err(|e| format!("invalid CORS origin {o:?}: {e}")))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("CORS config error: {e}"))?;
         let methods: Vec<_> = config
             .cors_methods
             .iter()
-            .map(|m| Method::from_bytes(m.as_bytes()).unwrap())
-            .collect();
+            .map(|m| {
+                Method::from_bytes(m.as_bytes())
+                    .map_err(|e| format!("invalid CORS method {m:?}: {e}"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("CORS config error: {e}"))?;
         let headers: Vec<_> = config
             .cors_headers
             .iter()
-            .map(|h| HeaderName::from_str(h).unwrap())
-            .collect();
+            .map(|h| {
+                HeaderName::from_str(h)
+                    .map_err(|e| format!("invalid CORS header {h:?}: {e}"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("CORS config error: {e}"))?;
         let mut layer = CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
             .allow_methods(AllowMethods::list(methods))
@@ -92,8 +102,10 @@ pub fn build_router(state: SharedState, config: &ServerConfig) -> Router {
         ));
     }
 
-    // Metrics, request ID, logging (always applied)
+    // Body size limit, metrics, request ID, logging (always applied)
+    let body_limit = DefaultBodyLimit::max(config.max_body_size);
     router = router
+        .layer(body_limit)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             metrics::track_metrics,
@@ -107,5 +119,5 @@ pub fn build_router(state: SharedState, config: &ServerConfig) -> Router {
     }
 
     // Shared state
-    router.with_state(state)
+    Ok(router.with_state(state))
 }

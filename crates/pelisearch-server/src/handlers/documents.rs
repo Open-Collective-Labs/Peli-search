@@ -155,7 +155,7 @@ pub async fn bulk_add_documents(
     for doc_req in payload.documents {
         let id = doc_req.id.clone();
         match Document::new(doc_req.id, doc_req.fields) {
-            Ok(doc) => match engine.add_document(&index_name, doc) {
+            Ok(doc) => match engine.add_document_no_flush(&index_name, doc) {
                 Ok(()) => results.push(BulkDocumentResult {
                     id,
                     status: "created".into(),
@@ -174,6 +174,9 @@ pub async fn bulk_add_documents(
             }),
         }
     }
+
+    // Single WAL flush for the entire batch
+    let _ = engine.flush_wal();
 
     Ok((StatusCode::CREATED, Json(BulkAddResponse { documents: results })))
 }

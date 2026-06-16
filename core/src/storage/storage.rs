@@ -191,6 +191,38 @@ impl Storage {
         Ok(())
     }
 
+    /// Add a document without flushing the WAL (for batch operations).
+    ///
+    /// Caller MUST call `flush_wal()` after the batch to guarantee durability.
+    pub fn add_document_no_flush(
+        &mut self,
+        index_name: &str,
+        document: Document,
+    ) -> Result<(), SearchError> {
+        self.wal
+            .append(&WalEntry::AddDocument {
+                index_name: index_name.to_string(),
+                document: document.clone(),
+            })
+            .map_err(|e| internal_err(e))?;
+
+        let index = self
+            .indexes
+            .get_mut(index_name)
+            .ok_or_else(|| SearchError::IndexNotFound(index_name.to_string()))?;
+
+        index.add_document(document)?;
+        Ok(())
+    }
+
+    /// Flush the write-ahead log to disk.
+    ///
+    /// Called after a batch of `add_document_no_flush` calls to guarantee
+    /// durability for the entire batch with a single fsync.
+    pub fn flush_wal(&mut self) -> Result<(), SearchError> {
+        self.wal.flush().map_err(|e| internal_err(e))
+    }
+
     /// Remove a document from an index.
     ///
     /// Write flow: append WAL → flush WAL → apply to memory.

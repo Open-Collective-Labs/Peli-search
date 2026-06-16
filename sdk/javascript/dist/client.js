@@ -11,6 +11,9 @@ export class PeliSearchClient {
     constructor(opts = {}) {
         const baseUrl = (opts.host ?? DEFAULT_HOST).replace(/\/+$/, "");
         const headers = { "Content-Type": "application/json" };
+        if (opts.apiKey) {
+            headers["X-Api-Key"] = opts.apiKey;
+        }
         this.request = (method, path, body) => PeliSearchClient.doFetch(baseUrl, headers, method, path, body);
         this.indexes = new IndexesModule(this.request);
         this.documents = new DocumentsModule(this.request);
@@ -52,6 +55,9 @@ export class PeliSearchClient {
     }
     async ready() {
         await this.request("GET", "/ready");
+    }
+    async metrics() {
+        return this.request("GET", "/metrics");
     }
     // ── Internal ─────────────────────────────────────────────────
     static async doFetch(baseUrl, headers, method, path, body) {

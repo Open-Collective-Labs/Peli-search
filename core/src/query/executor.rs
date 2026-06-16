@@ -127,7 +127,7 @@ impl QueryExecutor {
             sorted[request.from..end].to_vec()
         };
 
-        let documents: Vec<Document> = paged_hits
+        let documents: Vec<Document> = sorted
             .iter()
             .filter_map(|hit| index.get_document(&hit.document_id).cloned().ok())
             .collect();
@@ -162,11 +162,11 @@ impl QueryExecutor {
         let cached_hits = cache.as_ref().and_then(|c| c.get(cache_key));
         let mut from_cache = false;
 
-        let (sorted, total) = if let Some(results) = cached_hits {
+        let (paged, full_hits, total) = if let Some(results) = cached_hits {
             from_cache = true;
             let total = results.len();
             let paged = Self::page_hits(&results, request.from, request.size);
-            (paged, total)
+            (paged, results, total)
         } else {
             let results = retrieve_candidates(index, &request.query)?;
             let matches = filter_candidates(index, results, &request.filters);
@@ -178,7 +178,7 @@ impl QueryExecutor {
             }
 
             let paged = Self::page_hits(&sorted, request.from, request.size);
-            (paged, total)
+            (paged, sorted, total)
         };
 
         let elapsed = start.elapsed();
@@ -189,12 +189,12 @@ impl QueryExecutor {
         }
 
         let hits = if request.highlight {
-            Self::apply_highlights(index, sorted, &query_text)
+            Self::apply_highlights(index, paged, &query_text)
         } else {
-            sorted
+            paged
         };
 
-        let documents: Vec<Document> = hits
+        let documents: Vec<Document> = full_hits
             .iter()
             .filter_map(|hit| index.get_document(&hit.document_id).cloned().ok())
             .collect();

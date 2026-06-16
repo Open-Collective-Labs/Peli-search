@@ -244,11 +244,40 @@ impl SearchEngine {
         document: Document,
     ) -> Result<(), SearchError> {
         if let Some(storage) = self.storage_mut() {
-            storage.add_document(index_name, document)?;
-            // Keep manager in sync by replacing the index
-            self.sync_index_from_storage(index_name)?;
+            storage.add_document(index_name, document.clone())?;
+            self.manager.add_document(index_name, document)?;
         } else {
             self.manager.add_document(index_name, document)?;
+        }
+        Ok(())
+    }
+
+    /// Add a document without flushing the WAL (for batch operations).
+    ///
+    /// Caller MUST call `flush_wal()` after the batch to guarantee durability.
+    /// In in-memory mode, this is identical to `add_document`.
+    pub fn add_document_no_flush(
+        &mut self,
+        index_name: &str,
+        document: Document,
+    ) -> Result<(), SearchError> {
+        if let Some(storage) = self.storage_mut() {
+            storage.add_document_no_flush(index_name, document.clone())?;
+            self.manager.add_document(index_name, document)?;
+        } else {
+            self.manager.add_document(index_name, document)?;
+        }
+        Ok(())
+    }
+
+    /// Flush the write-ahead log to disk (persistent mode only).
+    ///
+    /// Called after a batch of `add_document_no_flush` calls to guarantee
+    /// durability for the entire batch with a single fsync. No-op in
+    /// in-memory mode.
+    pub fn flush_wal(&mut self) -> Result<(), SearchError> {
+        if let Some(storage) = self.storage_mut() {
+            storage.flush_wal()?;
         }
         Ok(())
     }
@@ -276,7 +305,7 @@ impl SearchEngine {
     ) -> Result<(), SearchError> {
         if let Some(storage) = self.storage_mut() {
             storage.remove_document(index_name, doc_id)?;
-            self.sync_index_from_storage(index_name)?;
+            self.manager.remove_document(index_name, doc_id)?;
         } else {
             self.manager.remove_document(index_name, doc_id)?;
         }
@@ -506,34 +535,6 @@ impl SearchEngine {
         index.get_document(doc_id)
     }
 
-    /// Rebuild the manager index from Storage's internal state after a write.
-    fn sync_index_from_storage(&mut self, name: &str) -> Result<(), SearchError> {
-        let storage = match self.storage.as_ref() {
-            Some(s) => s,
-            None => return Ok(()),
-        };
-        let index = storage.get_index(name)?;
-        let mapping = index.mapping().clone();
-
-        // Re-create the index in manager with the same mapping
-        self.manager.delete_index(name)?;
-        self.manager.create_index_with_mapping(name.to_string(), mapping)?;
-
-        // Copy documents
-        for doc_id in index.list_document_ids() {
-            let doc = index.get_document(&doc_id).map_err(|e| {
-                SearchError::Internal(format!("failed to read document '{doc_id}': {e}"))
-            })?;
-            self.manager
-                .add_document(name, doc.clone())
-                .map_err(|e| {
-                    SearchError::Internal(format!(
-                        "failed to copy document '{doc_id}' into manager: {e}"
-                    ))
-                })?;
-        }
-        Ok(())
-    }
 }
 
 impl std::fmt::Debug for SearchEngine {

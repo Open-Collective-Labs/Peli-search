@@ -69,9 +69,16 @@ pub async fn rate_limit(
     };
 
     let ip = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip().to_string())
+        .headers()
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next().map(|s| s.trim().to_string()))
+        .or_else(|| {
+            request
+                .extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ci| ci.0.ip().to_string())
+        })
         .unwrap_or_else(|| "unknown".into());
 
     if !rate_limiter.check(&ip).await {

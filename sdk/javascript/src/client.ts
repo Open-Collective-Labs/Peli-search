@@ -15,7 +15,10 @@ export class PeliSearchClient {
 
   constructor(opts: ClientOptions = {}) {
     const baseUrl = (opts.host ?? DEFAULT_HOST).replace(/\/+$/, "")
-    const headers = { "Content-Type": "application/json" }
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    if (opts.apiKey) {
+      headers["X-Api-Key"] = opts.apiKey
+    }
     this.request = <T>(method: string, path: string, body?: unknown) =>
       PeliSearchClient.doFetch<T>(baseUrl, headers, method, path, body)
     this.indexes = new IndexesModule(this.request)
