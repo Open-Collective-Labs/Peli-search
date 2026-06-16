@@ -80,6 +80,22 @@ paths:
                 name:
                   type: string
                   description: Unique index name
+                mapping:
+                  type: object
+                  description: Optional schema mapping
+                  properties:
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          field_type:
+                            type: string
+                            enum: [Text, Keyword, Integer, Float, Boolean]
+                          required:
+                            type: boolean
       responses:
         "201":
           description: Index created

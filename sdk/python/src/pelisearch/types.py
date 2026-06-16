@@ -77,7 +77,25 @@ class RangeQuery:
     range: dict[str, RangeCondition]
 
 
-QueryClause = MatchQuery | TermQuery | RangeQuery
+@dataclass
+class CoreQuery:
+    type: str
+    field: Optional[str] = None
+    value: Optional[Any] = None
+    gte: Optional[float] = None
+    gt: Optional[float] = None
+    lte: Optional[float] = None
+    lt: Optional[float] = None
+    must: Optional[list['CoreQuery']] = None
+    filter: Optional[list['CoreQuery']] = None
+    must_not: Optional[list['CoreQuery']] = None
+    should: Optional[list['CoreQuery']] = None
+    slop: Optional[int] = None
+    max_edit_distance: Optional[int] = None
+    prefix_length: Optional[int] = None
+
+
+QueryClause = MatchQuery | TermQuery | RangeQuery | CoreQuery | dict[str, Any]
 
 
 @dataclass

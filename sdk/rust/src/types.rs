@@ -11,6 +11,9 @@ pub enum QueryClause {
     Phrase(PhraseQuery),
     Fuzzy(FuzzyQuery),
     Prefix(PrefixQuery),
+    MultiMatch(MultiMatchQuery),
+    ConstantScore(ConstantScoreQuery),
+    DisMax(DisjunctionMaxQuery),
     #[serde(rename = "MatchAll")]
     MatchAll,
     #[serde(rename = "MatchNone")]
@@ -80,6 +83,25 @@ fn default_max_edits() -> u8 {
 pub struct PrefixQuery {
     pub field: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiMatchQuery {
+    pub fields: Vec<String>,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConstantScoreQuery {
+    pub filter: Box<QueryClause>,
+    pub boost: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisjunctionMaxQuery {
+    pub queries: Vec<QueryClause>,
+    #[serde(default)]
+    pub tie_breaker: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

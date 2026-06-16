@@ -6,8 +6,9 @@ mod state;
 
 use std::net::SocketAddr;
 
+use std::time::Duration;
 use tokio::signal;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::config::load_config;
 use crate::state::AppState;
@@ -57,12 +58,32 @@ async fn main() {
     );
     info!("listening on {addr}");
     info!("data directory: {}", config.data_path.display());
-
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    // Spawn background flush worker
+    let flush_state = state.clone();
+    let flush_interval = config.flush_interval_ms;
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(flush_interval));
+        loop {
+            interval.tick().await;
+            let mut engine = flush_state.engine.write().await;
+            if let Err(e) = engine.flush() {
+                error!("background flush failed: {e}");
+            }
+        }
+    });
+
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+
+    // Final flush on shutdown
+    info!("performing final flush before exit");
+    if let Err(e) = state.engine.write().await.flush() {
+        error!("final flush failed: {e}");
+    }
 }
 
 /// Wait for SIGINT or SIGTERM to trigger graceful shutdown.

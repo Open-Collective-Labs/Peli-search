@@ -27,29 +27,6 @@ Mappings define how each field in a document is stored and indexed. They are spe
 }
 ```
 
-## Dynamic Mappings
-
-When a field is not explicitly mapped, Peli Search infers its type from the JSON value:
-
-| JSON Value | Inferred Type |
-|------------|---------------|
-| string | text |
-| number (integer) | integer |
-| number (float) | float |
-| boolean | boolean |
-
-Dynamic mappings can be disabled:
-
-```json
-{
-  "mappings": {
-    "dynamic": false,
-    "properties": {
-      "title": { "type": "text" }
-    }
-  }
-}
-```
 
 ## Supported Types
 

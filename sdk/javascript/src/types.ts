@@ -58,7 +58,24 @@ export interface RangeQuery {
   range: { [field: string]: RangeCondition }
 }
 
-export type QueryClause = MatchQuery | TermQuery | RangeQuery
+export interface CoreQuery {
+  type: "Match" | "Term" | "Range" | "Bool" | "Phrase" | "Fuzzy" | "Prefix" | "MultiMatch" | "ConstantScore" | "DisMax" | "MatchAll" | "MatchNone"
+  field?: string
+  value?: unknown
+  gte?: number
+  gt?: number
+  lte?: number
+  lt?: number
+  must?: CoreQuery[]
+  filter?: CoreQuery[]
+  must_not?: CoreQuery[]
+  should?: CoreQuery[]
+  slop?: number
+  max_edit_distance?: number
+  prefix_length?: number
+}
+
+export type QueryClause = MatchQuery | TermQuery | RangeQuery | CoreQuery
 
 export interface SortField {
   field: string

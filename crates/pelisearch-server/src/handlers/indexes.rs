@@ -16,6 +16,7 @@ pub struct IndexListResponse {
 #[derive(Debug, Deserialize)]
 pub struct CreateIndexRequest {
     pub name: String,
+    pub mapping: Option<pelisearch_core::schema::Mapping>,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,9 +78,17 @@ pub async fn create_index(
     }
 
     let mut engine = state.engine.write().await;
-    engine
-        .create_index(&name)
-        .map_err(handle_create_error)?;
+    
+    if let Some(mapping) = payload.mapping {
+        engine
+            .create_index_with_mapping(&name, mapping)
+            .map_err(handle_create_error)?;
+    } else {
+        engine
+            .create_index(&name)
+            .map_err(handle_create_error)?;
+    }
+    
     Ok((
         StatusCode::CREATED,
         Json(IndexCreatedResponse { name }),

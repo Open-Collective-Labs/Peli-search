@@ -24,6 +24,10 @@ pub struct ServerConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
+    /// Interval in milliseconds to flush the search engine memory to disk.
+    #[serde(default = "default_flush_interval_ms")]
+    pub flush_interval_ms: u64,
+
     // ---- S-1: API Key Authentication ----
 
     /// API key for Bearer / X-API-Key authentication.
@@ -91,6 +95,10 @@ fn default_log_level() -> String {
     "info".into()
 }
 
+fn default_flush_interval_ms() -> u64 {
+    1000
+}
+
 fn default_cors_origins() -> Vec<String> {
     vec!["*".into()]
 }
@@ -110,6 +118,7 @@ impl Default for ServerConfig {
             port: default_port(),
             data_path: default_data_path(),
             log_level: default_log_level(),
+            flush_interval_ms: default_flush_interval_ms(),
             api_key: None,
             auth_enabled: true,
             rate_limit_enabled: false,
@@ -146,6 +155,10 @@ struct CliArgs {
     /// Log level (overrides config file).
     #[arg(long)]
     log_level: Option<String>,
+
+    /// Flush interval in milliseconds (overrides config file).
+    #[arg(long)]
+    flush_interval_ms: Option<u64>,
 
     /// API key for authentication (overrides config file).
     #[arg(long)]
@@ -202,6 +215,9 @@ pub fn load_config() -> Result<ServerConfig, String> {
     }
     if let Some(level) = cli.log_level {
         config.log_level = level;
+    }
+    if let Some(flush) = cli.flush_interval_ms {
+        config.flush_interval_ms = flush;
     }
     if let Some(key) = cli.api_key {
         config.api_key = Some(key);
