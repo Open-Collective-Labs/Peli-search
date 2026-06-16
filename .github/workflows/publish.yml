@@ -1,0 +1,74 @@
+name: Publish SDKs
+
+on:
+  push:
+    tags:
+      - "sdk/python-v*"
+      - "sdk/rust-v*"
+      - "sdk/go/v*"
+  workflow_dispatch:
+    inputs:
+      python:
+        description: Publish Python SDK to PyPI
+        type: boolean
+        default: false
+      rust:
+        description: Publish Rust SDK to crates.io
+        type: boolean
+        default: false
+      go:
+        description: Tag Go module for release
+        type: boolean
+        default: false
+      test_pypi:
+        description: Publish Python to Test PyPI instead
+        type: boolean
+        default: false
+
+env:
+  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+  TWINE_USERNAME: __token__
+
+jobs:
+  python:
+    if: |
+      github.event_name == 'workflow_dispatch' && (inputs.python || inputs.test_pypi)
+      || startsWith(github.ref, 'refs/tags/sdk/python-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build sdk/python/
+      - name: Publish to Test PyPI
+        if: github.event_name == 'workflow_dispatch' && inputs.test_pypi
+        run: twine upload --repository testpypi sdk/python/dist/*
+        env:
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      - name: Publish to PyPI
+        if: |
+          github.event_name == 'workflow_dispatch' && inputs.python && !inputs.test_pypi
+          || startsWith(github.ref, 'refs/tags/sdk/python-v')
+        run: twine upload sdk/python/dist/*
+        env:
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+  rust:
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.rust
+      || startsWith(github.ref, 'refs/tags/sdk/rust-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p pelisearch --allow-dirty
+
+  go:
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.go
+      || startsWith(github.ref, 'refs/tags/sdk/go/v')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Go module published by tag ${{ github.ref_name }}"

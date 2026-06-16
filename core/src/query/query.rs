@@ -1,13 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+use crate::query::bool_query::BoolQuery;
+use crate::query::constant_score_query::ConstantScoreQuery;
+use crate::query::dis_max_query::DisjunctionMaxQuery;
+use crate::query::fuzzy_query::FuzzyQuery;
 use crate::query::match_query::MatchQuery;
+use crate::query::multi_match_query::MultiMatchQuery;
+use crate::query::phrase_query::PhraseQuery;
+use crate::query::prefix_query::PrefixQuery;
 use crate::query::range_query::RangeQuery;
 use crate::query::term_query::TermQuery;
 
 /// A structured search query.
 ///
-/// Each variant represents a different kind of query constraint that can be
-/// combined with others through higher-level constructs.
+/// Each variant represents a different kind of query constraint.
+/// Queries can be nested inside `BoolQuery` and `DisjunctionMaxQuery`
+/// to build complex search expressions.
 ///
 /// # Examples
 ///
@@ -16,7 +24,10 @@ use crate::query::term_query::TermQuery;
 /// use pelisearch_core::query::MatchQuery;
 ///
 /// let q = Query::Match(MatchQuery::new("title", "electric bike"));
-/// assert_eq!(format!("{q:?}"), "Match(MatchQuery { field: \"title\", value: \"electric bike\" })");
+/// assert_eq!(
+///     format!("{q:?}"),
+///     "Match(MatchQuery { field: \"title\", value: \"electric bike\", term_boosts: {}, boost: 1.0 })"
+/// );
 /// ```
 ///
 /// # Serialization
@@ -25,8 +36,8 @@ use crate::query::term_query::TermQuery;
 ///
 /// ```json
 /// {"type": "Match", "field": "title", "value": "electric bike"}
-/// {"type": "Term", "field": "category", "value": "electronics"}
-/// {"type": "Range", "field": "price", "lte": 1000.0}
+/// {"type": "Bool", "must": [...], "filter": [...]}
+/// {"type": "Phrase", "field": "title", "value": "quick brown fox", "slop": 0}
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -37,6 +48,24 @@ pub enum Query {
     Term(TermQuery),
     /// Numeric range filter.
     Range(RangeQuery),
+    /// Boolean combination of sub-queries.
+    Bool(BoolQuery),
+    /// Multi-field match with per-field boosts.
+    MultiMatch(MultiMatchQuery),
+    /// Exact phrase with optional slop.
+    Phrase(PhraseQuery),
+    /// Fuzzy (Levenshtein) term matching.
+    Fuzzy(FuzzyQuery),
+    /// Prefix matching.
+    Prefix(PrefixQuery),
+    /// Wraps a query with a constant score.
+    ConstantScore(ConstantScoreQuery),
+    /// Disjunction max scoring across sub-queries.
+    DisMax(DisjunctionMaxQuery),
+    /// Matches all documents.
+    MatchAll,
+    /// Matches no documents.
+    MatchNone,
 }
 
 #[cfg(test)]

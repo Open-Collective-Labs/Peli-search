@@ -339,39 +339,92 @@ components:
       required: [query]
       properties:
         query:
-          $ref: "#/components/schemas/QueryClause"
+          oneOf:
+            - $ref: "#/components/schemas/CoreQuery"
+            - $ref: "#/components/schemas/DslQueryClause"
         filters:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            oneOf:
+              - $ref: "#/components/schemas/DslQueryClause"
         sort:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/SortField"
         aggregations:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/Aggregation"
         from:
           type: integer
           default: 0
         size:
           type: integer
           default: 10
+        highlight:
+          type: boolean
+          default: false
 
-    QueryClause:
+    # --- Core Query Format (tagged) ---
+    CoreQuery:
+      type: object
+      description: "A query in the core serde format: {\"type\": \"Match\", \"field\": \"title\", \"value\": \"bike\"}"
+      properties:
+        type:
+          type: string
+          enum: [Match, Term, Range, Bool, MultiMatch, Phrase, Fuzzy, Prefix, ConstantScore, DisMax, MatchAll, MatchNone]
+
+    # --- Backward-compatible DSL ---
+    DslQueryClause:
       type: object
       properties:
         match:
           type: object
-          description: "Full-text match: field_name -> search text"
           additionalProperties:
             type: string
-          example: {"title": "electric bike"}
+          description: "Full-text match: field_name -> search text"
+        term:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Exact term match: field_name -> value"
+        range:
+          type: object
+          description: "Range filter: field_name -> {gte, gt, lte, lt}"
+          additionalProperties:
+            $ref: "#/components/schemas/RangeCondition"
       minProperties: 1
+      maxProperties: 1
+
+    RangeCondition:
+      type: object
+      properties:
+        gte:
+          type: number
+        gt:
+          type: number
+        lte:
+          type: number
+        lt:
+          type: number
+
+    SortField:
+      type: object
+      properties:
+        field:
+          type: string
+        order:
+          type: string
+          default: Asc
+
+    Aggregation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Terms, Count, Min, Max, Average, Sum]
+        field:
+          type: string
 
     # --- Response ---
     SearchResponse:
@@ -383,7 +436,7 @@ components:
             $ref: "#/components/schemas/SearchHit"
         aggregations:
           type: object
-          description: Aggregation results keyed by name
+          description: Aggregation results keyed by field name
         total:
           type: integer
           description: Total number of matching hits before pagination
@@ -398,6 +451,11 @@ components:
         score:
           type: number
           format: float
+        highlighted:
+          type: object
+          description: Per-field highlighted snippets (present when highlight=true)
+          additionalProperties:
+            type: string
 
     MetricSnapshot:
       type: object

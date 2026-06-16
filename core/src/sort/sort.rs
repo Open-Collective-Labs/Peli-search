@@ -11,9 +11,10 @@ use serde::{Deserialize, Serialize};
 /// let desc = SortOrder::Desc;
 /// assert_ne!(asc, desc);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortOrder {
     /// Sort values from lowest to highest.
+    #[default]
     Asc,
     /// Sort values from highest to lowest.
     Desc,
@@ -38,6 +39,7 @@ pub struct SortField {
     /// The document field to sort by.
     pub field: String,
     /// The sort direction.
+    #[serde(default)]
     pub order: SortOrder,
 }
 

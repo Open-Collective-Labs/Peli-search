@@ -3,22 +3,10 @@
   "$id": "https://pelisearch.dev/schemas/SearchResponse.json",
   "title": "SearchResponse",
   "type": "object",
-  "required": ["hits", "total_hits", "page", "page_size"],
+  "required": ["hits", "total"],
   "properties": {
-    "hits": {
-      "type": "array",
-      "items": { "$ref": "SearchHit.json" }
-    },
-    "total_hits": { "type": "integer" },
-    "page": { "type": "integer" },
-    "page_size": { "type": "integer" },
-    "aggregations": { "type": "object", "additionalProperties": true },
-    "facet_distributions": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": { "type": "integer" }
-      }
-    }
+    "hits": { "type": "array", "items": { "$ref": "SearchHit.json" } },
+    "total": { "type": "integer", "minimum": 0 },
+    "aggregations": { "type": "object", "additionalProperties": true }
   }
 }

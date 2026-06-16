@@ -78,6 +78,10 @@ export class PeliSearchClient {
     await this.request<void>("GET", "/ready")
   }
 
+  async metrics(): Promise<{ request_count: number; search_count: number; total_latency_ns: number; document_count: number; index_count: number }> {
+    return this.request("GET", "/metrics")
+  }
+
   // ── Internal ─────────────────────────────────────────────────
 
   private static async doFetch<T>(

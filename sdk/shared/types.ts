@@ -6,7 +6,7 @@
  * Core operations:
  * - Index CRUD (create, get, list, delete)
  * - Document CRUD (add, get, delete, bulk add)
- * - Search (query DSL, filters, sorting, aggregations, facets, highlights)
+ * - Search (query DSL, filters, sorting, aggregations, highlighting)
  */
 
 export interface IndexInfo {
@@ -16,31 +16,42 @@ export interface IndexInfo {
 }
 
 export interface SearchHit {
+  index: string
   document_id: string
   score: number
-  fields: Record<string, unknown>
-  highlights?: Record<string, string[]>
+  highlighted?: Record<string, string>
 }
 
 export interface SearchResponse {
   hits: SearchHit[]
-  total_hits: number
-  page: number
-  page_size: number
+  total: number
   aggregations: Record<string, unknown>
-  facet_distributions?: Record<string, Record<string, number>>
+}
+
+export interface RangeCondition {
+  gte?: number
+  lte?: number
+  gt?: number
+  lt?: number
+}
+
+export type QueryClause =
+  | { match: Record<string, string> }
+  | { term: Record<string, string> }
+  | { range: Record<string, RangeCondition> }
+
+export interface SortField {
+  field: string
+  order: "Asc" | "Desc"
 }
 
 export interface SearchRequest {
   q?: string
-  query?: { match: Record<string, string> } | { term: Record<string, string> } | { range: Record<string, { gte?: number; lte?: number }> }
-  filter?: string
-  sort?: string[]
-  page?: number
-  page_size?: number
-  facets?: string[]
+  query?: QueryClause
+  filters?: QueryClause[]
+  sort?: SortField[]
+  from?: number
+  size?: number
   highlight?: boolean
-  highlight_fields?: string[]
-  highlight_pre_tag?: string
-  highlight_post_tag?: string
+  aggregations?: unknown[]
 }

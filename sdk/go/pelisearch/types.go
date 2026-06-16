@@ -4,34 +4,31 @@ package pelisearch
 
 // SearchHit represents a single search result.
 type SearchHit struct {
-	Index       string                 `json:"index,omitempty"`
-	DocumentID  string                 `json:"document_id"`
-	Score       float64                `json:"score"`
-	Fields      map[string]interface{} `json:"fields,omitempty"`
-	Highlights  map[string][]string    `json:"highlights,omitempty"`
+	Index       string              `json:"index"`
+	DocumentID  string              `json:"document_id"`
+	Score       float64             `json:"score"`
+	Highlighted map[string]string   `json:"highlighted,omitempty"`
 }
 
 // SearchResponse is the full search response.
 type SearchResponse struct {
-	Hits               []SearchHit               `json:"hits"`
-	Aggregations       map[string]interface{}    `json:"aggregations,omitempty"`
-	TotalHits          *int64                    `json:"total_hits,omitempty"`
-	Page               *int                      `json:"page,omitempty"`
-	PageSize           *int                      `json:"page_size,omitempty"`
-	FacetDistributions map[string]map[string]int `json:"facet_distributions,omitempty"`
+	Hits         []SearchHit            `json:"hits"`
+	Aggregations map[string]interface{} `json:"aggregations,omitempty"`
+	Total        int                    `json:"total"`
 }
 
 // IndexInfo describes an index.
 type IndexInfo struct {
-	Name          string           `json:"name"`
-	DocumentCount int              `json:"document_count"`
-	Fields        []FieldInfo      `json:"fields"`
+	Name          string      `json:"name"`
+	DocumentCount int         `json:"document_count"`
+	Fields        []FieldInfo `json:"fields"`
 }
 
 // FieldInfo describes a single field in the schema.
 type FieldInfo struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name      string `json:"name"`
+	FieldType string `json:"field_type"`
+	Required  bool   `json:"required"`
 }
 
 // IndexCreatedResponse is returned after creating an index.
@@ -61,29 +58,22 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// SortField defines a single sort specification.
+type SortField struct {
+	Field string `json:"field"`
+	Order string `json:"order,omitempty"`
+}
+
 // SearchRequest represents an incoming search request.
 type SearchRequest struct {
-	Q                *string                `json:"q,omitempty"`
-	Query            map[string]interface{} `json:"query,omitempty"`
-	Filter           *string                `json:"filter,omitempty"`
-	Sort             []string               `json:"sort,omitempty"`
-	Page             *int                   `json:"page,omitempty"`
-	PageSize         *int                   `json:"page_size,omitempty"`
-	Facets           []string               `json:"facets,omitempty"`
-	Highlight        *bool                  `json:"highlight,omitempty"`
-	HighlightFields  []string               `json:"highlight_fields,omitempty"`
-	HighlightPreTag  *string                `json:"highlight_pre_tag,omitempty"`
-	HighlightPostTag *string                `json:"highlight_post_tag,omitempty"`
-}
-
-// MatchQuery is a match query clause.
-type MatchQuery struct {
-	Match map[string]string `json:"match"`
-}
-
-// TermQuery is a term query clause.
-type TermQuery struct {
-	Term map[string]string `json:"term"`
+	Q            *string                `json:"q,omitempty"`
+	Query        map[string]interface{} `json:"query,omitempty"`
+	Filters      []interface{}          `json:"filters,omitempty"`
+	Sort         []SortField            `json:"sort,omitempty"`
+	From         *int                   `json:"from,omitempty"`
+	Size         *int                   `json:"size,omitempty"`
+	Highlight    *bool                  `json:"highlight,omitempty"`
+	Aggregations []interface{}          `json:"aggregations,omitempty"`
 }
 
 // RangeCondition defines a range filter.
@@ -94,7 +84,21 @@ type RangeCondition struct {
 	Lt  *float64 `json:"lt,omitempty"`
 }
 
-// RangeQuery is a range query clause.
-type RangeQuery struct {
-	Range map[string]RangeCondition `json:"range"`
+// CoreQuery represents a query in the core serde format (type-tagged).
+// All fields are optional except Type; which fields are used depends on Type.
+type CoreQuery struct {
+	Type            string       `json:"type"`
+	Field           string       `json:"field,omitempty"`
+	Value           interface{}  `json:"value,omitempty"`
+	Gte             *float64     `json:"gte,omitempty"`
+	Gt              *float64     `json:"gt,omitempty"`
+	Lte             *float64     `json:"lte,omitempty"`
+	Lt              *float64     `json:"lt,omitempty"`
+	Must            []CoreQuery  `json:"must,omitempty"`
+	Filter          []CoreQuery  `json:"filter,omitempty"`
+	MustNot         []CoreQuery  `json:"must_not,omitempty"`
+	Should          []CoreQuery  `json:"should,omitempty"`
+	Slop            *int         `json:"slop,omitempty"`
+	MaxEditDistance *uint8       `json:"max_edit_distance,omitempty"`
+	PrefixLength    *uint8       `json:"prefix_length,omitempty"`
 }

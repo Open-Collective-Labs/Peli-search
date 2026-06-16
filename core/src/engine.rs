@@ -402,6 +402,7 @@ impl SearchEngine {
     ///     aggregations: vec![],
     ///     from: 0,
     ///     size: 10,
+    ///     highlight: false,
     /// };
     /// let results = engine.search_request("products", &request).unwrap();
     /// assert_eq!(results.len(), 1);
@@ -440,6 +441,7 @@ impl SearchEngine {
     ///     aggregations: vec![],
     ///     from: 0,
     ///     size: 10,
+    ///     highlight: false,
     /// };
     /// let response = engine.search_request_with_explanations("products", &request).unwrap();
     /// assert_eq!(response.hits.len(), 1);
@@ -749,6 +751,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = engine.search_request("products", &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -772,6 +775,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let response = engine.search_request_with_explanations("test", &request).unwrap();
         assert_eq!(response.hits.len(), 1);
@@ -788,6 +792,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let err = engine.search_request("nonexistent", &request).unwrap_err();
         assert!(matches!(err, SearchError::IndexNotFound(_)));

@@ -2,8 +2,20 @@ Metadata-Version: 2.4
 Name: pelisearch
 Version: 0.1.0
 Summary: Official Python SDK for PeliSearch
-License: MIT
-Keywords: pelisearch,search,full-text-search
+Author: PeliSearch Contributors
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/Open-Collective-Labs/Peli-search
+Project-URL: Repository, https://github.com/Open-Collective-Labs/Peli-search
+Project-URL: Documentation, https://github.com/Open-Collective-Labs/Peli-search
+Keywords: pelisearch,search,full-text-search,client
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Internet :: WWW/HTTP
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 Requires-Dist: httpx>=0.27
@@ -14,3 +26,42 @@ Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
 Requires-Dist: pytest-httpx>=0.30; extra == "dev"
 Requires-Dist: mypy>=1.8; extra == "dev"
 Requires-Dist: ruff>=0.3; extra == "dev"
+
+# PeliSearch Python SDK
+
+Official Python client for [PeliSearch](https://github.com/Open-Collective-Labs/Peli-search).
+
+## Installation
+
+```bash
+pip install pelisearch
+```
+
+Requires Python 3.10+.
+
+## Quick Start
+
+```python
+from pelisearch import PeliSearch, SearchRequest
+
+client = PeliSearch("http://localhost:7700")
+
+# Create an index
+client.create_index("products")
+
+# Add documents
+client.add_document("products", "doc1", {"title": "Widget", "price": 9.99})
+
+# Search
+results = client.search("products", SearchRequest(q="widget"))
+for hit in results.hits:
+    print(hit.document_id, hit.score)
+```
+
+## Documentation
+
+See the [full SDK docs](https://github.com/Open-Collective-Labs/Peli-search) for detailed usage.
+
+## License
+
+MIT

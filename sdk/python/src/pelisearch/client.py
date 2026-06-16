@@ -73,6 +73,9 @@ class PeliSearchClient:
     def ready(self) -> None:
         self._request("GET", "/ready")
 
+    def metrics(self) -> dict:
+        return self._request("GET", "/metrics")
+
     # ── Indexes ──────────────────────────────────────────────────
 
     def list_indexes(self) -> list[str]:

@@ -7,46 +7,35 @@ Filters narrow search results without affecting relevance scoring. They are appl
 Match documents where a field equals an exact value:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
+curl -X POST http://127.0.0.1:7700/indexes/products/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": { "match": { "name": "laptop" } },
-    "filter": {
-      "term": { "brand": "apple" }
-    }
-  }'
-```
-
-Multiple term filters:
-
-```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": { "match": { "name": "laptop" } },
-    "filter": {
-      "terms": { "brand": ["apple", "dell"] }
-    }
+    "filters": [
+      { "term": { "brand": "apple" } }
+    ]
   }'
 ```
 
 ## Range Filters
 
-Match documents within a numeric or date range:
+Match documents within a numeric range:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
+curl -X POST http://127.0.0.1:7700/indexes/products/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": { "match": { "name": "laptop" } },
-    "filter": {
-      "range": {
-        "price": {
-          "gte": 500,
-          "lte": 2000
+    "filters": [
+      {
+        "range": {
+          "price": {
+            "gte": 500,
+            "lte": 2000
+          }
         }
       }
-    }
+    ]
   }'
 ```
 
@@ -56,37 +45,3 @@ curl -X POST http://127.0.0.1:8080/indexes/products/search \
 | `gt` | Greater than |
 | `lte` | Less than or equal |
 | `lt` | Less than |
-
-## Exists Filters
-
-Match documents that have a value for a specific field:
-
-```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": { "match": { "name": "laptop" } },
-    "filter": {
-      "exists": { "field": "rating" }
-    }
-  }'
-```
-
-## Combining Filters
-
-Multiple filters are combined with `and` logic by default:
-
-```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": { "match": { "name": "laptop" } },
-    "filter": {
-      "and": [
-        { "term": { "brand": "apple" } },
-        { "range": { "price": { "gte": 1000 } } },
-        { "exists": { "field": "in_stock" } }
-      ]
-    }
-  }'
-```

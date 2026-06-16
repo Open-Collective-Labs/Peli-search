@@ -5,12 +5,12 @@
 By default, search results are sorted by relevance score descending. To sort by a field:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
+curl -X POST http://127.0.0.1:7700/indexes/products/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": { "match": { "name": "laptop" } },
     "sort": [
-      { "price": "asc" }
+      { "field": "price", "order": "Asc" }
     ]
   }'
 ```
@@ -20,48 +20,20 @@ curl -X POST http://127.0.0.1:8080/indexes/products/search \
 Sort by multiple fields — results are ordered by the first field, ties are broken by subsequent fields:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
+curl -X POST http://127.0.0.1:7700/indexes/products/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": { "match": { "name": "laptop" } },
     "sort": [
-      { "category": "asc" },
-      { "price": "desc" },
-      "_score"
+      { "field": "category", "order": "Asc" },
+      { "field": "price", "order": "Desc" }
     ]
   }'
 ```
 
-## Sort Modes
+| Order | Behavior |
+|-------|----------|
+| `Asc` | Sort ascending (A → Z, low → high) |
+| `Desc` | Sort descending (Z → A, high → low) |
 
-| Mode | Syntax | Description |
-|------|--------|-------------|
-| Field ascending | `{"field": "asc"}` | Sort field A → Z |
-| Field descending | `{"field": "desc"}` | Sort field Z → A |
-| Relevance | `"_score"` | Sort by BM25 score |
-| Document ID | `"_id"` | Sort by document ID |
-
-## Missing Values
-
-Control how documents with missing sort fields are ordered:
-
-```bash
-curl -X POST http://127.0.0.1:8080/indexes/products/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": { "match": { "name": "laptop" } },
-    "sort": [
-      {
-        "rating": {
-          "order": "desc",
-          "missing": "_last"
-        }
-      }
-    ]
-  }'
-```
-
-| Strategy | Behavior |
-|----------|----------|
-| `_last` (default) | Documents without the field appear last |
-| `_first` | Documents without the field appear first |
+The default sort order is `Asc`.

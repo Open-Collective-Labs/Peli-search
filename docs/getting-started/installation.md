@@ -37,7 +37,7 @@ brew install peli/tap/peli
 **Cargo (if you have Rust installed):**
 
 ```bash
-cargo install peli-search
+cargo install pelisearch-server
 ```
 
 ### Build from Source
@@ -46,7 +46,7 @@ cargo install peli-search
 git clone https://github.com/Open-Collective-Labs/Peli-search.git
 cd Peli-search
 cargo build --release
-./target/release/peli --help
+./target/release/pelisearch-server --help
 ```
 
 ## Running Locally
@@ -64,17 +64,16 @@ peli-search = "0.1"
 
 ```bash
 # Start the server with default settings
-peli serve
+pelisearch-server
 
 # Start on a custom port
-peli serve --port 8080 --data-dir ./data
+pelisearch-server --port 7700 --data-path ./data
 ```
 
-The server starts an HTTP API at `http://127.0.0.1:8080` by default.
+The server starts an HTTP API at `http://127.0.0.1:7700` by default.
 
 ### Verify Installation
 
 ```bash
-peli --version
-# Expected output: peli-search 0.1.0
+pelisearch-server --version
 ```

@@ -6,6 +6,8 @@ use crate::tokenizer::tokenize;
 
 /// A simple in-memory inverted index mapping terms to document IDs.
 ///
+/// Now includes a positions map for phrase/proximity queries.
+///
 /// # Examples
 ///
 /// ```
@@ -15,6 +17,8 @@ use crate::tokenizer::tokenize;
 pub struct InvertedIndex {
     postings: HashMap<String, Vec<String>>,
     doc_terms: HashMap<String, Vec<String>>,
+    /// term -> (doc_id -> positions)
+    positions: HashMap<String, HashMap<String, Vec<usize>>>,
 }
 
 impl InvertedIndex {
@@ -23,12 +27,14 @@ impl InvertedIndex {
         Self {
             postings: HashMap::new(),
             doc_terms: HashMap::new(),
+            positions: HashMap::new(),
         }
     }
 
-    /// Add a document's text to the index.
+    /// Add a document's text to the index, tracking token positions.
     ///
-    /// The text is tokenized and each token is mapped to the document ID.
+    /// The text is tokenized and each token is mapped to the document ID
+    /// along with its position (for phrase/proximity queries).
     /// Returns an error if the document ID is empty.
     ///
     /// # Examples
@@ -50,7 +56,7 @@ impl InvertedIndex {
         let tokens = tokenize(text);
         let mut unique_terms = Vec::new();
 
-        for token in &tokens {
+        for (pos, token) in tokens.iter().enumerate() {
             let entry = self.postings.entry(token.clone()).or_default();
             if !entry.contains(&id.to_string()) {
                 entry.push(id.to_string());
@@ -58,15 +64,22 @@ impl InvertedIndex {
             if !unique_terms.contains(token) {
                 unique_terms.push(token.clone());
             }
+
+            self.positions
+                .entry(token.clone())
+                .or_default()
+                .entry(id.to_string())
+                .or_default()
+                .push(pos);
         }
 
         self.doc_terms.insert(id.to_string(), unique_terms);
         Ok(())
     }
 
-    /// Remove a document from the index.
+    /// Remove a document from the index, including its positions.
     ///
-    /// All postings associated with the document are removed.
+    /// All postings and positions associated with the document are removed.
     ///
     /// # Examples
     ///
@@ -85,6 +98,12 @@ impl InvertedIndex {
                     postings.retain(|doc_id| doc_id != id);
                     if postings.is_empty() {
                         self.postings.remove(&term);
+                    }
+                }
+                if let Some(doc_positions) = self.positions.get_mut(&term) {
+                    doc_positions.remove(id);
+                    if doc_positions.is_empty() {
+                        self.positions.remove(&term);
                     }
                 }
             }
@@ -109,6 +128,34 @@ impl InvertedIndex {
     /// ```
     pub fn get_postings(&self, term: &str) -> Option<&Vec<String>> {
         self.postings.get(term)
+    }
+
+    /// Get the positions of a term within a specific document.
+    ///
+    /// Returns `None` if the term has no positions in the document.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pelisearch_core::index::InvertedIndex;
+    ///
+    /// let mut index = InvertedIndex::new();
+    /// index.add_document("doc1", "hello world hello").unwrap();
+    /// let positions = index.get_positions("hello", "doc1").unwrap();
+    /// assert_eq!(positions, &vec![0, 2]);
+    /// ```
+    pub fn get_positions(&self, term: &str, doc_id: &str) -> Option<&Vec<usize>> {
+        self.positions.get(term)?.get(doc_id)
+    }
+
+    /// Get all terms in the index.
+    pub fn terms(&self) -> impl Iterator<Item = &String> {
+        self.postings.keys()
+    }
+
+    /// Get all document IDs containing the given term.
+    pub fn get_doc_ids(&self, term: &str) -> Option<impl Iterator<Item = &String>> {
+        self.postings.get(term).map(|v| v.iter())
     }
 }
 

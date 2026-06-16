@@ -48,7 +48,7 @@ client.search("products", SearchRequest(q="wireless mouse"))
 client.search("products", SearchRequest(query=MatchQuery(match={"title": "keyboard"})))
 
 # Pagination
-client.search("products", SearchRequest(q="shoes", page=2, page_size=20, sort=["price:asc"]))
+client.search("products", SearchRequest(q="shoes", from_=20, size=20))
 ```
 
 ## Filtering
@@ -58,7 +58,7 @@ client.search(
     "products",
     SearchRequest(
         q="keyboard",
-        filter="category = electronics AND price < 100",
+        filters=[MatchQuery(match={"category": "electronics"})],
     ),
 )
 ```
@@ -68,10 +68,9 @@ client.search(
 ```python
 results = client.search(
     "jobs",
-    SearchRequest(q="engineer", facets=["company", "location"]),
+    SearchRequest(q="engineer"),
 )
 
-print(results.facet_distributions)
 print(results.aggregations)
 ```
 

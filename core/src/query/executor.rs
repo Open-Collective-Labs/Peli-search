@@ -4,9 +4,10 @@ use crate::aggregation::Aggregation;
 use crate::document::Document;
 use crate::error::SearchError;
 use crate::filter::FilterEvaluator;
+use crate::highlighting;
 use crate::index::Index;
 use crate::query::request::SearchRequest;
-use crate::query::{MatchQuery, Query};
+use crate::query::{MatchQuery, Query, QueryCache, QueryOptimizer, QueryPlanner, SearchAnalytics};
 use crate::sort::comparator::sort_hits;
 use crate::types::{AggregationResults, SearchHit, SearchResponse, SearchResult};
 
@@ -50,6 +51,7 @@ use crate::types::{AggregationResults, SearchHit, SearchResponse, SearchResult};
 ///     aggregations: vec![],
 ///     from: 0,
 ///     size: 10,
+///     highlight: false,
 /// };
 ///
 /// let results = QueryExecutor::execute(&index, &request).unwrap();
@@ -99,6 +101,7 @@ impl QueryExecutor {
     ///     aggregations: vec![],
     ///     from: 0,
     ///     size: 10,
+    ///     highlight: false,
     /// };
     ///
     /// let response = QueryExecutor::execute_with_explanations(&index, &request).unwrap();
@@ -135,6 +138,111 @@ impl QueryExecutor {
             aggregations: agg_results,
             total,
         })
+    }
+
+    /// Execute a search request with full pipeline: planner → optimizer → cache → analytics → highlighting.
+    ///
+    /// When `cache` is `Some`, results are cached and checked before execution.
+    /// When `analytics` is `Some`, query performance is recorded.
+    /// When `request.highlight` is true, matching terms are wrapped in `<em>` tags.
+    pub fn execute_with_pipeline(
+        index: &Index,
+        request: &SearchRequest,
+        cache: Option<&QueryCache>,
+        analytics: Option<&SearchAnalytics>,
+    ) -> Result<SearchResponse, SearchError> {
+        let start = std::time::Instant::now();
+
+        let plan = QueryPlanner::plan(index, &request.query);
+        let _optimized = QueryOptimizer::optimize(plan);
+
+        let query_text = format!("{:?}", request.query);
+        let cache_key = QueryCache::cache_key(&query_text, request.from, request.size);
+
+        let cached_hits = cache.as_ref().and_then(|c| c.get(cache_key));
+        let mut from_cache = false;
+
+        let (sorted, total) = if let Some(results) = cached_hits {
+            from_cache = true;
+            let total = results.len();
+            let paged = Self::page_hits(&results, request.from, request.size);
+            (paged, total)
+        } else {
+            let results = retrieve_candidates(index, &request.query)?;
+            let matches = filter_candidates(index, results, &request.filters);
+            let sorted = sort_hits(matches, &request.sort, index);
+            let total = sorted.len();
+
+            if let Some(c) = cache.as_ref() {
+                c.insert(cache_key, sorted.clone());
+            }
+
+            let paged = Self::page_hits(&sorted, request.from, request.size);
+            (paged, total)
+        };
+
+        let elapsed = start.elapsed();
+
+        if let Some(a) = analytics.as_ref() {
+            a.record_query(&query_text, elapsed.as_nanos() as u64, total);
+            a.record_cache(from_cache);
+        }
+
+        let hits = if request.highlight {
+            Self::apply_highlights(index, sorted, &query_text)
+        } else {
+            sorted
+        };
+
+        let documents: Vec<Document> = hits
+            .iter()
+            .filter_map(|hit| index.get_document(&hit.document_id).cloned().ok())
+            .collect();
+        let agg_results = compute_aggregations(&request.aggregations, &documents);
+
+        Ok(SearchResponse {
+            hits,
+            aggregations: agg_results,
+            total,
+        })
+    }
+
+    fn page_hits(hits: &[SearchHit], from: usize, size: usize) -> Vec<SearchHit> {
+        if from >= hits.len() {
+            Vec::new()
+        } else {
+            let end = std::cmp::min(from.saturating_add(size), hits.len());
+            hits[from..end].to_vec()
+        }
+    }
+
+    fn apply_highlights(
+        index: &Index,
+        hits: Vec<SearchHit>,
+        query_text: &str,
+    ) -> Vec<SearchHit> {
+        hits.into_iter()
+            .map(|hit| {
+                let doc = match index.get_document(&hit.document_id) {
+                    Ok(d) => d,
+                    Err(_) => return hit,
+                };
+                let mut highlights = std::collections::HashMap::new();
+                for (field_name, field_value) in &doc.fields {
+                    if let Some(text) = field_value.as_str() {
+                        let highlighted = highlighting::highlight(text, query_text);
+                        if highlighted != text {
+                            highlights.insert(field_name.clone(), highlighted);
+                        }
+                    }
+                }
+                if highlights.is_empty() {
+                    hit
+                } else {
+                    hit.with_highlights(highlights)
+                }
+            })
+            .collect()
     }
 }
 
@@ -187,7 +295,7 @@ fn compute_aggregations(
 /// Retrieve BM25-ranked candidates for the given query.
 fn retrieve_candidates(index: &Index, query: &Query) -> Result<Vec<SearchResult>, SearchError> {
     match query {
-        Query::Match(MatchQuery { field, value }) => {
+        Query::Match(MatchQuery { field, value, .. }) => {
             // Use OR semantics to collect all candidates across terms.
             // Field-specific filtering is applied afterward.
             let mut results = index.search_any(value);
@@ -246,8 +354,9 @@ fn filter_evaluator(filter: &Query, doc: &Document) -> bool {
     match filter {
         Query::Term(tq) => tq.evaluate(doc),
         Query::Range(rq) => rq.evaluate(doc),
-        Query::Match(_) => {
-            // Match queries are not used as filters; skip.
+        Query::Match(_) | Query::MultiMatch(_) | Query::Bool(_) | Query::Phrase(_)
+        | Query::Fuzzy(_) | Query::Prefix(_) | Query::ConstantScore(_)
+        | Query::DisMax(_) | Query::MatchAll | Query::MatchNone => {
             true
         }
     }
@@ -313,6 +422,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 2);
@@ -328,6 +438,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -344,6 +455,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -363,6 +475,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(results.len(), 1);
@@ -379,6 +492,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert!(results.is_empty());
@@ -394,6 +508,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         assert!(results.is_empty());
@@ -409,6 +524,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         // doc2 ("premium bike") matches both "bike" (1 token) and "premium" (1 token),
@@ -430,6 +546,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let response = QueryExecutor::execute_with_explanations(&index, &request).unwrap();
         assert_eq!(response.hits.len(), 1);
@@ -447,6 +564,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let no_filters = QueryExecutor::execute(&index, &request).unwrap();
         assert_eq!(no_filters.len(), 2);
@@ -462,10 +580,118 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let results = QueryExecutor::execute(&index, &request).unwrap();
         for hit in &results {
             assert_eq!(hit.index, "test");
+        }
+    }
+
+    #[test]
+    fn pipeline_basic_search() {
+        let index = setup_index();
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "bike")),
+            filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
+            from: 0,
+            size: 10,
+            highlight: false,
+        };
+        let response = QueryExecutor::execute_with_pipeline(&index, &request, None, None).unwrap();
+        assert_eq!(response.hits.len(), 2);
+        assert!(response.total >= 2);
+    }
+
+    #[test]
+    fn pipeline_with_cache() {
+        let index = setup_index();
+        let cache = crate::query::QueryCache::new();
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "bike")),
+            filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
+            from: 0,
+            size: 10,
+            highlight: false,
+        };
+        // First call — should miss cache
+        let r1 = QueryExecutor::execute_with_pipeline(&index, &request, Some(&cache), None).unwrap();
+        assert_eq!(r1.hits.len(), 2);
+        assert_eq!(cache.misses(), 1);
+        // Second call — should hit cache
+        let r2 = QueryExecutor::execute_with_pipeline(&index, &request, Some(&cache), None).unwrap();
+        assert_eq!(r2.hits.len(), 2);
+        assert_eq!(cache.hits(), 1);
+    }
+
+    #[test]
+    fn pipeline_with_analytics() {
+        let index = setup_index();
+        let analytics = crate::query::SearchAnalytics::new();
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "bike")),
+            filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
+            from: 0,
+            size: 10,
+            highlight: false,
+        };
+        QueryExecutor::execute_with_pipeline(&index, &request, None, Some(&analytics)).unwrap();
+        assert!(analytics.total_queries() >= 1);
+    }
+
+    #[test]
+    fn pipeline_with_cache_and_analytics() {
+        let index = setup_index();
+        let cache = crate::query::QueryCache::new();
+        let analytics = crate::query::SearchAnalytics::new();
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "bike")),
+            filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
+            from: 0,
+            size: 10,
+            highlight: false,
+        };
+        // First call — cache miss
+        QueryExecutor::execute_with_pipeline(&index, &request, Some(&cache), Some(&analytics)).unwrap();
+        assert_eq!(cache.misses(), 1);
+        // Second call — cache hit
+        QueryExecutor::execute_with_pipeline(&index, &request, Some(&cache), Some(&analytics)).unwrap();
+        assert_eq!(cache.hits(), 1);
+        assert!(analytics.total_queries() >= 2);
+    }
+
+    #[test]
+    fn pipeline_highlighting() {
+        let mut index = Index::new("test", Mapping::new(vec![]));
+        let doc = Document::new(
+            "doc1",
+            HashMap::from([("title".to_string(), serde_json::json!("bike electric scooter"))]),
+        )
+        .unwrap();
+        index.add_document(doc).unwrap();
+        let request = SearchRequest {
+            query: Query::Match(MatchQuery::new("title", "electric")),
+            filters: vec![],
+            sort: vec![],
+            aggregations: vec![],
+            from: 0,
+            size: 10,
+            highlight: true,
+        };
+        let response = QueryExecutor::execute_with_pipeline(&index, &request, None, None).unwrap();
+        assert_eq!(response.hits.len(), 1);
+        if let Some(ref highlights) = response.hits[0].highlighted {
+            if let Some(title_hl) = highlights.get("title") {
+                assert!(title_hl.contains("<em>"));
+            }
         }
     }
 }

@@ -52,6 +52,10 @@ impl Client {
         Ok(())
     }
 
+    pub async fn metrics(&self) -> Result<MetricSnapshot> {
+        self.get_::<MetricSnapshot>("/metrics").await
+    }
+
     // ── Internal ─────────────────────────────────────────────────
 
     pub(crate) async fn get_<T: DeserializeOwned>(&self, path: &str) -> Result<T> {

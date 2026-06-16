@@ -13,6 +13,7 @@ __all__ = [
     "DocumentCreatedResponse",
     "BulkDocumentResult",
     "BulkResponse",
+    "SortField",
     "MatchQuery",
     "TermQuery",
     "RangeCondition",

@@ -2,7 +2,13 @@ import os
 
 import pytest
 
-from pelisearch import MatchQuery, PeliSearch, PeliSearchError, SearchRequest
+from pelisearch import (
+    MatchQuery,
+    PeliSearch,
+    PeliSearchError,
+    SearchRequest,
+    SortField,
+)
 
 BASE_URL = os.environ.get("PELISEARCH_TEST_URL", "http://127.0.0.1:7700")
 INDEX = "sdk_py_test"
@@ -71,9 +77,14 @@ def test_search_legacy_q(client):
     )
     results = client.search(INDEX, SearchRequest(q="mouse"))
     assert len(results.hits) > 0
+    assert results.total > 0
+    for hit in results.hits:
+        assert hit.index == INDEX
+        assert hit.document_id
+        assert hit.score >= 0
 
 
-def test_search_dsl_and_filter(client):
+def test_search_dsl(client):
     reset_index(client, INDEX)
     client.bulk_add_documents(
         INDEX,
@@ -83,14 +94,25 @@ def test_search_dsl_and_filter(client):
         INDEX,
         SearchRequest(
             query=MatchQuery(match={"title": "keyboard"}),
-            filter="category = electronics",
+            sort=[SortField(field="title")],
         ),
     )
     assert len(results.hits) > 0
+    assert results.total > 0
 
 
-def test_search_facets(client):
+def test_search_pagination(client):
     reset_index(client, INDEX)
-    client.add_document(INDEX, "p1", {"title": "Mouse", "category": "electronics"})
-    results = client.search(INDEX, SearchRequest(q="mouse", facets=["category"]))
-    assert results.hits is not None
+    client.bulk_add_documents(
+        INDEX,
+        [
+            {"id": "a", "fields": {"title": "Alpha"}},
+            {"id": "b", "fields": {"title": "Beta"}},
+            {"id": "c", "fields": {"title": "Gamma"}},
+        ],
+    )
+    all_results = client.search(INDEX, SearchRequest(q="alpha beta gamma"))
+    assert len(all_results.hits) >= 2
+
+    paged = client.search(INDEX, SearchRequest(q="alpha beta gamma", from_=0, size=1))
+    assert len(paged.hits) <= 1

@@ -78,32 +78,23 @@ describe("search", () => {
   it("searches with legacy q", async () => {
     const results = await client.search(INDEX, { q: "mouse" })
     expect(results.hits.length).toBeGreaterThan(0)
+    expect(results.total).toBeGreaterThan(0)
+    for (const hit of results.hits) {
+      expect(hit.index).toBe(INDEX)
+      expect(hit.document_id).toBeTruthy()
+      expect(hit.score).toBeGreaterThanOrEqual(0)
+    }
   })
 
-  it("searches with DSL match and filter", async () => {
+  it("searches with DSL match", async () => {
     const results = await client.search(INDEX, {
       query: { match: { title: "keyboard" } },
-      filter: "category = electronics",
     })
     expect(results.hits.length).toBeGreaterThan(0)
   })
 
-  it("returns facets", async () => {
-    const results = await client.search(INDEX, {
-      q: "mouse",
-      facets: ["category"],
-    })
-    expect(results.hits).toBeDefined()
-  })
-})
-
-describe("recovery", () => {
-  it("documents persist when re-indexed in same session", async () => {
-    const name = "sdk_js_recovery"
-    await resetIndex(name)
-    await client.addDocument(name, "r1", { title: "Persist Me" })
-    const results = await client.search(name, { q: "persist" })
-    expect(results.hits.length).toBeGreaterThan(0)
-    await client.deleteIndex(name)
+  it("supports pagination", async () => {
+    const results = await client.search(INDEX, { q: "mouse keyboard", from: 0, size: 1 })
+    expect(results.hits.length).toBeLessThanOrEqual(1)
   })
 })

@@ -1,0 +1,9 @@
+target/
+node_modules/
+.env/
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+*.pyc

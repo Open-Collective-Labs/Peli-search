@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// A full-text match query.
 ///
 /// The `value` is analyzed (tokenized) before matching against the index.
 /// This is the primary query type for human-readable text fields.
+///
+/// Supports optional per-term boosting and field-level search.
 ///
 /// # Examples
 ///
@@ -16,10 +20,21 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MatchQuery {
-    /// The field to search in.
+    /// The field to search in. Empty string means all indexed text.
     pub field: String,
     /// The text value to match (analyzed).
     pub value: String,
+    /// Per-term boost factors. If empty, all terms have boost 1.0.
+    /// Maps token -> boost multiplier.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub term_boosts: HashMap<String, f32>,
+    /// Overall query boost multiplier (default: 1.0).
+    #[serde(default = "one_f32")]
+    pub boost: f32,
+}
+
+fn one_f32() -> f32 {
+    1.0
 }
 
 impl MatchQuery {
@@ -28,7 +43,32 @@ impl MatchQuery {
         Self {
             field: field.into(),
             value: value.into(),
+            term_boosts: HashMap::new(),
+            boost: 1.0,
         }
+    }
+
+    /// Set the overall query boost.
+    pub fn with_boost(mut self, boost: f32) -> Self {
+        self.boost = boost;
+        self
+    }
+
+    /// Set the overall query boost (builder-style, deprecated name for with_boost).
+    pub fn set_boost(&mut self, boost: f32) {
+        self.boost = boost;
+    }
+
+    /// Boost a specific term in the query.
+    /// Terms not explicitly boosted default to 1.0.
+    pub fn boost_term(mut self, term: impl Into<String>, boost: f32) -> Self {
+        self.term_boosts.insert(term.into(), boost);
+        self
+    }
+
+    /// Get the effective boost for a term (overall * per-term).
+    pub fn boost(&self, term: &str) -> f32 {
+        self.boost * self.term_boosts.get(term).copied().unwrap_or(1.0)
     }
 }
 

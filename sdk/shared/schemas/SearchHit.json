@@ -3,17 +3,14 @@
   "$id": "https://pelisearch.dev/schemas/SearchHit.json",
   "title": "SearchHit",
   "type": "object",
-  "required": ["document_id", "score", "fields"],
+  "required": ["index", "document_id", "score"],
   "properties": {
+    "index": { "type": "string" },
     "document_id": { "type": "string" },
     "score": { "type": "number" },
-    "fields": { "type": "object", "additionalProperties": true },
-    "highlights": {
+    "highlighted": {
       "type": "object",
-      "additionalProperties": {
-        "type": "array",
-        "items": { "type": "string" }
-      }
+      "additionalProperties": { "type": "string" }
     }
   }
 }

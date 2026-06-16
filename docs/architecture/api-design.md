@@ -5,7 +5,7 @@
 ### Base URL
 
 ```
-http://127.0.0.1:8080
+http://127.0.0.1:7700
 ```
 
 ### Endpoints
@@ -14,7 +14,7 @@ http://127.0.0.1:8080
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `PUT` | `/indexes/{index}` | Create or update an index |
+| `POST` | `/indexes` | Create an index |
 | `DELETE` | `/indexes/{index}` | Delete an index |
 | `GET` | `/indexes/{index}` | Get index metadata |
 | `GET` | `/indexes` | List all indexes |

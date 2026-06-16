@@ -11,7 +11,7 @@ class SearchOperations:
         self._request = request
 
     def search(self, index: str, request: SearchRequest) -> SearchResponse:
-        payload = _drop_none(asdict(request))
+        payload = _serialize_request(request)
         body = self._request(
             "POST",
             f"/indexes/{_esc(index)}/search",
@@ -21,20 +21,25 @@ class SearchOperations:
             SearchHit(
                 document_id=h["document_id"],
                 score=h["score"],
-                index=h.get("index"),
-                fields=h.get("fields"),
-                highlights=h.get("highlights"),
+                index=h["index"],
+                highlighted=h.get("highlighted"),
             )
             for h in body["hits"]
         ]
         return SearchResponse(
             hits=hits,
-            aggregations=body.get("aggregations") or {},
-            total_hits=body.get("total_hits"),
-            page=body.get("page"),
-            page_size=body.get("page_size"),
-            facet_distributions=body.get("facet_distributions"),
+            aggregations=body.get("aggregations", {}),
+            total=body.get("total", 0),
         )
+
+
+def _serialize(d: dict) -> dict:
+    """Recursively convert dataclass dicts to plain dicts for JSON serialization."""
+    if isinstance(d, dict):
+        return {k: _serialize(v) for k, v in d.items()}
+    elif isinstance(d, list):
+        return [_serialize(v) for v in d]
+    return d
 
 
 def _esc(s: str) -> str:
@@ -45,3 +50,10 @@ def _esc(s: str) -> str:
 
 def _drop_none(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _serialize_request(req: SearchRequest) -> dict:
+    d = asdict(req)
+    if "from_" in d:
+        d["from"] = d.pop("from_")
+    return _drop_none(_serialize(d))

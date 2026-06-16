@@ -5,7 +5,7 @@ use crate::query::Query;
 use crate::sort::SortField;
 
 /// A structured search request combining a main query with optional filters,
-/// sort specifications, and aggregations.
+/// sort specifications, aggregations, highlighting, and pagination.
 ///
 /// # Examples
 ///
@@ -25,12 +25,14 @@ use crate::sort::SortField;
 ///     ],
 ///     from: 0,
 ///     size: 10,
+///     highlight: false,
 /// };
 ///
 /// assert!(matches!(request.query, Query::Match(_)));
 /// assert_eq!(request.filters.len(), 1);
 /// assert_eq!(request.sort.len(), 1);
 /// assert_eq!(request.aggregations.len(), 1);
+/// assert!(!request.highlight);
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchRequest {
@@ -51,6 +53,9 @@ pub struct SearchRequest {
     /// The maximum number of hits to return.
     #[serde(default = "default_size")]
     pub size: usize,
+    /// Whether to highlight matching terms in results.
+    #[serde(default)]
+    pub highlight: bool,
 }
 
 fn default_size() -> usize {
@@ -70,6 +75,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         assert!(req.filters.is_empty());
     }
@@ -86,6 +92,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         assert_eq!(req.filters.len(), 2);
     }
@@ -101,6 +108,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let json = serde_json::to_string(&req).unwrap();
         let deserialized: SearchRequest = serde_json::from_str(&json).unwrap();
@@ -116,6 +124,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(!json.contains("filters"));
@@ -130,6 +139,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let debug = format!("{req:?}");
         assert!(debug.contains("f"));
@@ -145,6 +155,7 @@ mod tests {
             aggregations: vec![],
             from: 0,
             size: 10,
+            highlight: false,
         };
         let b = a.clone();
         assert_eq!(a, b);

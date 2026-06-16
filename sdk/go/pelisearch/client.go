@@ -11,6 +11,15 @@ import (
 	"strings"
 )
 
+// MetricSnapshot contains runtime metrics.
+type MetricSnapshot struct {
+	RequestCount   uint64 `json:"request_count"`
+	SearchCount    uint64 `json:"search_count"`
+	TotalLatencyNs uint64 `json:"total_latency_ns"`
+	DocumentCount  uint64 `json:"document_count"`
+	IndexCount     uint64 `json:"index_count"`
+}
+
 // Client is the PeliSearch HTTP client.
 type Client struct {
 	baseURL    string
@@ -82,6 +91,15 @@ func (c *Client) Health(ctx context.Context) error {
 func (c *Client) Ready(ctx context.Context) error {
 	_, err := c.do(ctx, "GET", "/ready", nil)
 	return err
+}
+
+// Metrics returns operational metrics.
+func (c *Client) Metrics(ctx context.Context) (*MetricSnapshot, error) {
+	var snapshot MetricSnapshot
+	if err := c.doInto(ctx, "GET", "/metrics", nil, &snapshot); err != nil {
+		return nil, err
+	}
+	return &snapshot, nil
 }
 
 // ── Internal ──────────────────────────────────────────────────────

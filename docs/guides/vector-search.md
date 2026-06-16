@@ -46,7 +46,7 @@ Define vector fields in the index mappings:
 ## Similarity Search
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/articles/search \
+curl -X POST http://127.0.0.1:7700/indexes/articles/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": {

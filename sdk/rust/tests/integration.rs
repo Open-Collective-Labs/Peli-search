@@ -60,7 +60,7 @@ async fn document_operations() {
 }
 
 #[tokio::test]
-async fn search_and_aggregations() {
+async fn search_operations() {
     let client = setup_client().await;
     let index = "sdk_rs_search";
     reset_index(&client, index).await;
@@ -81,13 +81,17 @@ async fn search_and_aggregations() {
             index,
             &SearchRequest {
                 q: Some("mouse".into()),
-                facets: Some(vec!["category".into()]),
                 ..Default::default()
             },
         )
         .await
         .unwrap();
     assert!(!results.hits.is_empty());
+    assert!(results.total > 0);
+    for hit in &results.hits {
+        assert_eq!(hit.index, index);
+        assert!(!hit.document_id.is_empty());
+    }
 
     client.delete_index(index).await.unwrap();
 }

@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 description = "Official Rust SDK for PeliSearch"
 license = "MIT"
+homepage = "https://github.com/Open-Collective-Labs/Peli-search"
+repository = "https://github.com/Open-Collective-Labs/Peli-search"
+documentation = "https://docs.rs/pelisearch"
+readme = "README.md"
+keywords = ["pelisearch", "search", "full-text-search", "client"]
+categories = ["web-programming::http-client", "api-bindings"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

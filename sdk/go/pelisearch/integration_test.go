@@ -68,11 +68,17 @@ func TestIntegration(t *testing.T) {
 	if len(results.Hits) == 0 {
 		t.Fatal("expected search hits")
 	}
+	if results.Total < len(results.Hits) {
+		t.Fatal("total should be at least hits length")
+	}
+	for _, hit := range results.Hits {
+		if hit.Index == "" {
+			t.Fatal("hit missing index")
+		}
+	}
 
-	filter := "category = electronics"
 	results, err = client.Search(ctx, index, &pelisearch.SearchRequest{
 		Query: map[string]interface{}{"match": map[string]string{"title": "keyboard"}},
-		Filter: &filter,
 	})
 	if err != nil {
 		t.Fatalf("dsl search: %v", err)
@@ -81,10 +87,26 @@ func TestIntegration(t *testing.T) {
 		t.Fatal("expected dsl search hits")
 	}
 
+	results, err = client.Search(ctx, index, &pelisearch.SearchRequest{
+		Q:    strPtr("mouse"),
+		From: intPtr(0),
+		Size: intPtr(1),
+	})
+	if err != nil {
+		t.Fatalf("paged search: %v", err)
+	}
+	if len(results.Hits) > 1 {
+		t.Fatal("expected at most 1 hit with size=1")
+	}
+
 	if err := client.DeleteIndex(ctx, index); err != nil {
 		t.Fatalf("delete index: %v", err)
 	}
 }
+
+func strPtr(s string) *string { return &s }
+
+func intPtr(i int) *int { return &i }
 
 func TestContextTimeout(t *testing.T) {
 	client := pelisearch.NewClientFromURL(testURL())

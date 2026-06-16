@@ -4,16 +4,22 @@
   "title": "SearchRequest",
   "type": "object",
   "properties": {
-    "q": { "type": "string", "description": "Simple query text (searches all fields)" },
+    "q": { "type": "string" },
     "query": { "$ref": "QueryClause.json" },
-    "filter": { "type": "string" },
-    "sort": { "type": "array", "items": { "type": "string" } },
-    "page": { "type": "integer", "minimum": 1 },
-    "page_size": { "type": "integer", "minimum": 1 },
-    "facets": { "type": "array", "items": { "type": "string" } },
-    "highlight": { "type": "boolean" },
-    "highlight_fields": { "type": "array", "items": { "type": "string" } },
-    "highlight_pre_tag": { "type": "string" },
-    "highlight_post_tag": { "type": "string" }
+    "filters": { "type": "array", "items": { "$ref": "QueryClause.json" } },
+    "sort": { "type": "array", "items": { "$ref": "#/$defs/SortField" } },
+    "from": { "type": "integer", "minimum": 0 },
+    "size": { "type": "integer", "minimum": 1 },
+    "highlight": { "type": "boolean" }
+  },
+  "$defs": {
+    "SortField": {
+      "type": "object",
+      "properties": {
+        "field": { "type": "string" },
+        "order": { "type": "string", "enum": ["Asc", "Desc"] }
+      },
+      "required": ["field"]
+    }
   }
 }

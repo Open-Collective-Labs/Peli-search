@@ -340,32 +340,108 @@ components:
       properties:
         query:
           $ref: "#/components/schemas/QueryClause"
+        filters:
+          type: array
+          description: Filter clauses applied before ranking
+          items:
+            $ref: "#/components/schemas/QueryClause"
+        sort:
+          type: array
+          description: Sort specifications
+          items:
+            $ref: "#/components/schemas/SortField"
+        from:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Starting offset for pagination
+        size:
+          type: integer
+          minimum: 1
+          default: 10
+          description: Maximum number of hits to return
+        highlight:
+          type: boolean
+          default: false
+          description: Whether to highlight matching terms in results
+        aggregations:
+          type: array
+          description: Aggregation specifications
+          items:
+            $ref: "#/components/schemas/Aggregation"
+
+    SortField:
+      type: object
+      required: [field, order]
+      properties:
+        field:
+          type: string
+        order:
+          type: string
+          enum: [Asc, Desc]
+          default: Asc
 
     QueryClause:
       type: object
+      minProperties: 1
       properties:
         match:
           type: object
           description: "Full-text match: field_name -> search text"
           additionalProperties:
             type: string
-          example: {"title": "electric bike"}
-      minProperties: 1
+        term:
+          type: object
+          description: "Exact term match: field_name -> value"
+          additionalProperties:
+            type: string
+        range:
+          type: object
+          description: "Numeric range: field_name -> {gte, lte, gt, lt}"
+          additionalProperties:
+            $ref: "#/components/schemas/RangeCondition"
+
+    RangeCondition:
+      type: object
+      properties:
+        gte:
+          type: number
+        lte:
+          type: number
+        gt:
+          type: number
+        lt:
+          type: number
+
+    Aggregation:
+      type: object
+      description: Aggregation specification
+      properties:
+        name:
+          type: string
+        field:
+          type: string
 
     # --- Response ---
     SearchResponse:
       type: object
+      required: [hits, total]
       properties:
         hits:
           type: array
           items:
             $ref: "#/components/schemas/SearchHit"
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of matching documents before pagination
         aggregations:
           type: object
           description: Aggregation results keyed by name
 
     SearchHit:
       type: object
+      required: [index, document_id, score]
       properties:
         index:
           type: string
@@ -374,6 +450,11 @@ components:
         score:
           type: number
           format: float
+        highlighted:
+          type: object
+          description: Per-field highlighted snippets
+          additionalProperties:
+            type: string
 
     MetricSnapshot:
       type: object

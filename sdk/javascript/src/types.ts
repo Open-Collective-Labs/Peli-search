@@ -1,24 +1,20 @@
 export interface SearchHit {
   document_id: string
   score: number
-  index?: string
-  fields?: Record<string, unknown>
-  highlights?: Record<string, string[]>
+  index: string
+  highlighted?: Record<string, string>
 }
 
 export interface SearchResponse {
   hits: SearchHit[]
+  total: number
   aggregations: Record<string, unknown>
-  total_hits?: number
-  page?: number
-  page_size?: number
-  facet_distributions?: Record<string, Record<string, number>>
 }
 
 export interface IndexInfo {
   name: string
   document_count: number
-  fields: { name: string; type: string }[]
+  fields: { name: string; field_type: string; required: boolean }[]
 }
 
 export interface IndexCreatedResponse {
@@ -64,18 +60,20 @@ export interface RangeQuery {
 
 export type QueryClause = MatchQuery | TermQuery | RangeQuery
 
+export interface SortField {
+  field: string
+  order: "Asc" | "Desc"
+}
+
 export interface SearchRequest {
   q?: string
   query?: QueryClause
-  filter?: string
-  sort?: string[]
-  page?: number
-  page_size?: number
-  facets?: string[]
+  filters?: QueryClause[]
+  sort?: SortField[]
+  from?: number
+  size?: number
   highlight?: boolean
-  highlight_fields?: string[]
-  highlight_pre_tag?: string
-  highlight_post_tag?: string
+  aggregations?: unknown[]
 }
 
 export interface ClientOptions {

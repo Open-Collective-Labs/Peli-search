@@ -7,7 +7,7 @@ Once documents are indexed, you can search them using various query types.
 The most basic search — finds documents whose text fields match the query terms.
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/search \
+curl -X POST http://127.0.0.1:7700/indexes/movies/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": {
@@ -24,18 +24,18 @@ curl -X POST http://127.0.0.1:8080/indexes/movies/search \
 
 ## Filters
 
-Narrow results without affecting relevance scoring.
+Narrow results without affecting relevance scoring. Filters are specified as an array.
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/search \
+curl -X POST http://127.0.0.1:7700/indexes/movies/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": {
       "match": { "title": "the" }
     },
-    "filter": {
-      "term": { "genre": "sci-fi" }
-    }
+    "filters": [
+      { "term": { "genre": "sci-fi" } }
+    ]
   }'
 ```
 
@@ -44,19 +44,19 @@ curl -X POST http://127.0.0.1:8080/indexes/movies/search \
 | Filter | Example | Description |
 |--------|---------|-------------|
 | Term | `{"term": {"genre": "sci-fi"}}` | Exact match |
-| Range | `{"range": {"year": {"gte": 2000}}}` | Numeric/date range |
-| Exists | `{"exists": {"field": "rating"}}` | Field exists |
+| Range | `{"range": {"price": {"gte": 10, "lte": 100}}}` | Numeric range |
+
+Multiple filters are combined with AND logic.
 
 ## Sorting
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/search \
+curl -X POST http://127.0.0.1:7700/indexes/movies/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": { "match": { "title": "the" } },
     "sort": [
-      { "year": "desc" },
-      "_score"
+      { "field": "year", "order": "Desc" }
     ]
   }'
 ```
@@ -66,23 +66,11 @@ curl -X POST http://127.0.0.1:8080/indexes/movies/search \
 ### Offset Pagination
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/search \
+curl -X POST http://127.0.0.1:7700/indexes/movies/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": { "match": { "title": "the" } },
     "from": 10,
     "size": 10
-  }'
-```
-
-### Cursor Pagination (recommended for deep pages)
-
-```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": { "match": { "title": "the" } },
-    "size": 10,
-    "cursor": "eyJpZCI6IjEwIn0="
   }'
 ```

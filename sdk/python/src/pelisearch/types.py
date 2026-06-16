@@ -6,21 +6,17 @@ from typing import Any, Optional
 
 @dataclass
 class SearchHit:
+    index: str
     document_id: str
     score: float
-    index: Optional[str] = None
-    fields: Optional[dict[str, Any]] = None
-    highlights: Optional[dict[str, list[str]]] = None
+    highlighted: Optional[dict[str, str]] = None
 
 
 @dataclass
 class SearchResponse:
     hits: list[SearchHit]
     aggregations: dict[str, Any] = field(default_factory=dict)
-    total_hits: Optional[int] = None
-    page: Optional[int] = None
-    page_size: Optional[int] = None
-    facet_distributions: Optional[dict[str, dict[str, int]]] = None
+    total: int = 0
 
 
 @dataclass
@@ -53,6 +49,12 @@ class BulkResponse:
 
 
 @dataclass
+class SortField:
+    field: str
+    order: str = "Asc"
+
+
+@dataclass
 class MatchQuery:
     match: dict[str, str]
 
@@ -82,12 +84,9 @@ QueryClause = MatchQuery | TermQuery | RangeQuery
 class SearchRequest:
     q: Optional[str] = None
     query: Optional[QueryClause] = None
-    filter: Optional[str] = None
-    sort: Optional[list[str]] = None
-    page: Optional[int] = None
-    page_size: Optional[int] = None
-    facets: Optional[list[str]] = None
+    filters: Optional[list[QueryClause]] = None
+    sort: Optional[list[SortField]] = None
+    from_: Optional[int] = None
+    size: Optional[int] = None
     highlight: Optional[bool] = None
-    highlight_fields: Optional[list[str]] = None
-    highlight_pre_tag: Optional[str] = None
-    highlight_post_tag: Optional[str] = None
+    aggregations: Optional[list[Any]] = None

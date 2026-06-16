@@ -6,7 +6,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use pelisearch_core::document::Document;
-use pelisearch_core::query::{MatchQuery, Query, SearchRequest};
+use pelisearch_core::query::{MatchQuery, Query, RangeQuery, SearchRequest};
 
 use crate::handlers::indexes::ErrorResponse;
 use crate::state::SharedState;
@@ -50,25 +50,29 @@ pub struct BulkDocumentResult {
 }
 
 // ---------------------------------------------------------------------------
-// Search DSL types
+// Search types
 // ---------------------------------------------------------------------------
 
-/// Accept both legacy `{"q": "..."}` and the new query DSL.
+/// Accept both legacy `{"q": "..."}`, the DSL format, and the core Query format.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum SearchRequestBody {
     /// Legacy simple query.
     Legacy { q: String },
     /// Structured query DSL.
-    Dsl(SearchQueryDsl),
+    Dsl(Box<SearchQueryDsl>),
 }
 
 /// Structured query DSL body.
+///
+/// `query` accepts two formats:
+/// - Core format: `{"type": "Match", "field": "title", "value": "bike"}`
+/// - DSL format: `{"match": {"title": "bike"}}` (backward compatible, supports match/term/range)
 #[derive(Debug, Deserialize)]
 pub struct SearchQueryDsl {
-    pub query: QueryClause,
+    pub query: serde_json::Value,
     #[serde(default)]
-    pub filters: Vec<pelisearch_core::query::Query>,
+    pub filters: Vec<serde_json::Value>,
     #[serde(default)]
     pub sort: Vec<pelisearch_core::sort::SortField>,
     #[serde(default)]
@@ -77,18 +81,31 @@ pub struct SearchQueryDsl {
     pub from: usize,
     #[serde(default = "default_size")]
     pub size: usize,
+    #[serde(default)]
+    pub highlight: bool,
 }
 
 fn default_size() -> usize {
     10
 }
 
-/// A single query clause. Currently only `match` is supported.
+/// Backward-compatible DSL query clause. Supports `match`, `term`, and `range`.
 #[derive(Debug, Deserialize)]
-pub struct QueryClause {
-    /// Full-text match: `{"match": {"field_name": "search text"}}`
+pub struct DslQueryClause {
     #[serde(rename = "match")]
     pub match_: Option<HashMap<String, String>>,
+    #[serde(rename = "term")]
+    pub term_: Option<HashMap<String, String>>,
+    #[serde(rename = "range")]
+    pub range_: Option<HashMap<String, RangeCondition>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RangeCondition {
+    pub gte: Option<f64>,
+    pub lte: Option<f64>,
+    pub gt: Option<f64>,
+    pub lt: Option<f64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -182,16 +199,21 @@ pub async fn delete_document(
 
 /// POST /indexes/:name/search
 ///
-/// Accepts two request formats:
+/// Accepts three request formats:
 ///
 /// **Legacy** (backward compatible):
 /// ```json
 /// {"q": "search text"}
 /// ```
 ///
-/// **Query DSL**:
+/// **Core Query format** (full support for all query types):
 /// ```json
-/// {"query": {"match": {"field": "search text"}}}
+/// {"query": {"type": "Match", "field": "title", "value": "search text"}}
+/// ```
+///
+/// **DSL format** (backward compatible, match/term/range only):
+/// ```json
+/// {"query": {"match": {"title": "search text"}}}
 /// ```
 pub async fn search(
     State(state): State<SharedState>,
@@ -216,7 +238,6 @@ pub async fn search(
 fn build_search_request(body: &SearchRequestBody) -> Result<SearchRequest, String> {
     match body {
         SearchRequestBody::Legacy { q } => {
-            // Convert legacy `{"q": "..."}` to a match-all-fields query.
             Ok(SearchRequest {
                 query: Query::Match(MatchQuery::new("", q)),
                 filters: vec![],
@@ -224,31 +245,91 @@ fn build_search_request(body: &SearchRequestBody) -> Result<SearchRequest, Strin
                 aggregations: vec![],
                 from: 0,
                 size: 10,
+                highlight: false,
             })
         }
         SearchRequestBody::Dsl(dsl) => {
-            let mut queries: Vec<Query> = Vec::new();
+            let query = parse_query_value(&dsl.query)?
+                .ok_or_else(|| "a query is required (e.g. \"type\": \"Match\")".to_string())?;
 
-            if let Some(ref match_fields) = dsl.query.match_ {
-                for (field, value) in match_fields {
-                    queries.push(Query::Match(MatchQuery::new(field, value)));
+            let mut filters = Vec::new();
+            for fv in &dsl.filters {
+                if let Some(q) = parse_query_value(fv)? {
+                    filters.push(q);
                 }
             }
 
-            let query = queries.pop().ok_or_else(|| {
-                "at least one query clause is required (e.g. \"match\")".to_string()
-            })?;
-
             Ok(SearchRequest {
                 query,
-                filters: dsl.filters.clone(),
+                filters,
                 sort: dsl.sort.clone(),
                 aggregations: dsl.aggregations.clone(),
                 from: dsl.from,
                 size: dsl.size,
+                highlight: dsl.highlight,
             })
         }
     }
+}
+
+/// Parse a JSON value as a Query. Tries the core serde format first,
+/// then falls back to the backward-compatible DSL format (match/term/range).
+fn parse_query_value(value: &serde_json::Value) -> Result<Option<Query>, String> {
+    // Try core Query format (uses #[serde(tag = "type")])
+    if let Ok(query) = serde_json::from_value::<Query>(value.clone()) {
+        return Ok(Some(query));
+    }
+
+    // Try backward-compatible DSL format
+    if let Ok(dsl) = serde_json::from_value::<DslQueryClause>(value.clone()) {
+        let queries = convert_dsl_clause(&dsl);
+        let mut results: Vec<Query> = queries.into_iter().collect::<Result<Vec<_>, _>>()?;
+        if results.len() == 1 {
+            return Ok(Some(results.remove(0)));
+        }
+        if results.len() > 1 {
+            return Err("multiple query clauses in a single query field are not allowed; use {\"type\": \"Bool\"} to combine".to_string());
+        }
+    }
+
+    Ok(None)
+}
+
+fn convert_dsl_clause(qc: &DslQueryClause) -> Vec<Result<Query, String>> {
+    let mut queries = Vec::new();
+
+    if let Some(ref fields) = qc.match_ {
+        for (field, value) in fields {
+            queries.push(Ok(Query::Match(MatchQuery::new(field, value))));
+        }
+    }
+
+    if let Some(ref fields) = qc.term_ {
+        for (field, value) in fields {
+            queries.push(Ok(Query::Term(pelisearch_core::query::TermQuery::new(field, value))));
+        }
+    }
+
+    if let Some(ref fields) = qc.range_ {
+        for (field, condition) in fields {
+            let mut rq = RangeQuery::new(field);
+            if let Some(v) = condition.gte {
+                rq = rq.with_gte(v);
+            }
+            if let Some(v) = condition.lte {
+                rq = rq.with_lte(v);
+            }
+            if let Some(v) = condition.gt {
+                rq = rq.with_gt(v);
+            }
+            if let Some(v) = condition.lt {
+                rq = rq.with_lt(v);
+            }
+            queries.push(Ok(Query::Range(rq)));
+        }
+    }
+
+    queries
 }
 
 fn handle_add_error(e: pelisearch_core::error::SearchError) -> (StatusCode, Json<ErrorResponse>) {

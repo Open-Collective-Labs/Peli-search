@@ -5,46 +5,40 @@ This guide walks through your first index creation, document insertion, and sear
 ## 1. Start the Server
 
 ```bash
-peli serve
+pelisearch-server
 ```
 
-The server listens on `http://127.0.0.1:8080`.
+The server listens on `http://127.0.0.1:7700`.
 
 ## 2. Create an Index
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes \
+curl -X POST http://127.0.0.1:7700/indexes \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "movies",
-    "mappings": {
-      "properties": {
-        "title": { "type": "text" },
-        "year": { "type": "integer" },
-        "genre": { "type": "keyword" }
-      }
-    }
+    "name": "movies"
   }'
 ```
 
 ## 3. Add Documents
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/documents \
+curl -X POST http://127.0.0.1:7700/indexes/movies/documents \
   -H "Content-Type: application/json" \
   -d '{
-    "documents": [
-      { "id": "1", "title": "The Matrix", "year": 1999, "genre": "sci-fi" },
-      { "id": "2", "title": "Inception", "year": 2010, "genre": "sci-fi" },
-      { "id": "3", "title": "The Godfather", "year": 1972, "genre": "drama" }
-    ]
+    "id": "1",
+    "fields": {
+      "title": "The Matrix",
+      "year": 1999,
+      "genre": "sci-fi"
+    }
   }'
 ```
 
 ## 4. Search Documents
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/movies/search \
+curl -X POST http://127.0.0.1:7700/indexes/movies/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": {
@@ -59,17 +53,13 @@ curl -X POST http://127.0.0.1:8080/indexes/movies/search \
 {
   "hits": [
     {
-      "id": "1",
-      "score": 0.693,
-      "document": {
-        "title": "The Matrix",
-        "year": 1999,
-        "genre": "sci-fi"
-      }
+      "index": "movies",
+      "document_id": "1",
+      "score": 0.693
     }
   ],
-  "total_hits": 1,
-  "query_time_ms": 2
+  "total": 1,
+  "aggregations": {}
 }
 ```
 

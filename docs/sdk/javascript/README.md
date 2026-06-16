@@ -55,34 +55,32 @@ Pagination and sorting:
 ```typescript
 await client.search("products", {
   q: "shoes",
-  page: 2,
-  page_size: 20,
-  sort: ["price:asc"],
+  from: 20,
+  size: 20,
+  sort: [{ field: "price", order: "Asc" }],
 })
 ```
 
 ## Filtering
 
-Use filter expressions to narrow results:
+Use filter clauses to narrow results:
 
 ```typescript
 await client.search("products", {
   q: "keyboard",
-  filter: "category = electronics AND price < 100",
+  filters: [{ match: { category: "electronics" } }],
 })
 ```
 
 ## Aggregations
 
-Request facets to get field distributions:
+Aggregation results are returned in the `aggregations` field:
 
 ```typescript
 const results = await client.search("products", {
   q: "engineer",
-  facets: ["company", "location"],
 })
 
-console.log(results.facet_distributions)
 console.log(results.aggregations)
 ```
 

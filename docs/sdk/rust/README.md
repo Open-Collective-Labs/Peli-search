@@ -71,7 +71,7 @@ client.search("products", &SearchRequest {
 ```rust
 client.search("products", &SearchRequest {
     q: Some("keyboard".into()),
-    filter: Some("category = electronics AND price < 100".into()),
+    filters: vec![serde_json::json!({"match": {"category": "electronics"}})],
     ..Default::default()
 }).await?;
 ```
@@ -81,13 +81,10 @@ client.search("products", &SearchRequest {
 ```rust
 let results = client.search("jobs", &SearchRequest {
     q: Some("engineer".into()),
-    facets: Some(vec!["company".into(), "location".into()]),
     ..Default::default()
 }).await?;
 
-if let Some(facets) = results.facet_distributions {
-    println!("{:?}", facets);
-}
+println!("{:?}", results.aggregations);
 ```
 
 ## Error Handling

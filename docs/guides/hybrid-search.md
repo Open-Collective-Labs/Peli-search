@@ -15,7 +15,7 @@ Hybrid search combines BM25 (keyword) and vector (semantic) search to get the be
 ## Combining BM25 and Vectors
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/articles/search \
+curl -X POST http://127.0.0.1:7700/indexes/articles/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": {
@@ -49,7 +49,7 @@ score = 1 / (60 + rank_bm25) + 1 / (60 + rank_vector)
 | `weights` | `[0.5, 0.5]` | Relative weight for each search method |
 
 ```bash
-curl -X POST http://127.0.0.1:8080/indexes/articles/search \
+curl -X POST http://127.0.0.1:7700/indexes/articles/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": {

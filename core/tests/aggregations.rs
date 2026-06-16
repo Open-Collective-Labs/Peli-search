@@ -45,6 +45,7 @@ fn terms_single_category() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -87,6 +88,7 @@ fn terms_multiple_categories() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = response.aggregations.get("category").unwrap();
@@ -111,6 +113,7 @@ fn terms_empty_index() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine
         .search_request_with_explanations("empty", &request)
@@ -132,6 +135,7 @@ fn count_aggregation() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -151,6 +155,7 @@ fn min_aggregation() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -173,6 +178,7 @@ fn max_aggregation() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -192,6 +198,7 @@ fn average_aggregation() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -211,6 +218,7 @@ fn sum_aggregation() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let response = engine.search_request_with_explanations("test", &request).unwrap();
     let aggs = &response.aggregations;
@@ -254,6 +262,7 @@ fn combined_query_filters_sort_aggregations() {
         ],
         from: 0,
         size: 10,
+        highlight: false,
     };
 
     let response = engine

@@ -12,17 +12,6 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    /// Create a new `SearchResult`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pelisearch_core::types::SearchResult;
-    ///
-    /// let r = SearchResult::new("doc1", 0.85);
-    /// assert_eq!(r.document_id, "doc1");
-    /// assert!((r.score - 0.85).abs() < 1e-10);
-    /// ```
     pub fn new(document_id: impl Into<String>, score: f64) -> Self {
         Self {
             document_id: document_id.into(),
@@ -32,17 +21,6 @@ impl SearchResult {
 }
 
 /// A search hit that identifies the source index alongside the result.
-///
-/// # Examples
-///
-/// ```
-/// use pelisearch_core::types::SearchHit;
-///
-/// let hit = SearchHit::new("products", "doc1", 7.42);
-/// assert_eq!(hit.index, "products");
-/// assert_eq!(hit.document_id, "doc1");
-/// assert!((hit.score - 7.42).abs() < 1e-10);
-/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHit {
     /// The name of the index that matched.
@@ -51,16 +29,25 @@ pub struct SearchHit {
     pub document_id: String,
     /// The relevance score (higher is more relevant).
     pub score: f64,
+    /// Optional per-field highlighted snippets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlighted: Option<HashMap<String, String>>,
 }
 
 impl SearchHit {
-    /// Create a new `SearchHit`.
     pub fn new(index: impl Into<String>, document_id: impl Into<String>, score: f64) -> Self {
         Self {
             index: index.into(),
             document_id: document_id.into(),
             score,
+            highlighted: None,
         }
+    }
+
+    /// Attach highlighted fields to this hit.
+    pub fn with_highlights(mut self, highlights: HashMap<String, String>) -> Self {
+        self.highlighted = Some(highlights);
+        self
     }
 }
 
@@ -68,21 +55,6 @@ impl SearchHit {
 pub type AggregationResults = HashMap<String, serde_json::Value>;
 
 /// A search response containing hits and aggregation results.
-///
-/// # Examples
-///
-/// ```
-/// use pelisearch_core::types::{SearchHit, SearchResponse, AggregationResults};
-///
-/// let hits = vec![
-///     SearchHit::new("products", "doc1", 0.95),
-///     SearchHit::new("products", "doc2", 0.80),
-/// ];
-/// let aggs = AggregationResults::new();
-/// let response = SearchResponse::new(hits, aggs, 2);
-/// assert_eq!(response.hits.len(), 2);
-/// assert_eq!(response.total, 2);
-/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResponse {
     /// Ranked search hits.
@@ -95,7 +67,6 @@ pub struct SearchResponse {
 }
 
 impl SearchResponse {
-    /// Create a new `SearchResponse`.
     pub fn new(hits: Vec<SearchHit>, aggregations: AggregationResults, total: usize) -> Self {
         Self { hits, aggregations, total }
     }
@@ -137,6 +108,14 @@ mod tests {
         assert_eq!(h.index, "products");
         assert_eq!(h.document_id, "doc1");
         assert!((h.score - 7.42).abs() < 1e-10);
+    }
+
+    #[test]
+    fn search_hit_with_highlights() {
+        let mut highlights = HashMap::new();
+        highlights.insert("title".to_string(), "Learning <em>Rust</em>".to_string());
+        let h = SearchHit::new("docs", "doc1", 1.0).with_highlights(highlights.clone());
+        assert_eq!(h.highlighted, Some(highlights));
     }
 
     #[test]

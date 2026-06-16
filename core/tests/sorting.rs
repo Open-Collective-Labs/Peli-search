@@ -34,6 +34,7 @@ fn search_with_sort(engine: &SearchEngine, sort: Vec<SortField>) -> Vec<String> 
         aggregations: vec![],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let results = engine.search_request("test", &request).unwrap();
     results.into_iter().map(|h| h.document_id).collect()
@@ -79,6 +80,7 @@ fn multi_field_sorting() {
         aggregations: vec![],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let results = engine.search_request("test", &request).unwrap();
     let ids: Vec<&str> = results.iter().map(|h| h.document_id.as_str()).collect();
@@ -110,6 +112,7 @@ fn missing_field_sorting() {
         aggregations: vec![],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let results = engine.search_request("test", &request).unwrap();
     let ids: Vec<&str> = results.iter().map(|h| h.document_id.as_str()).collect();
@@ -126,6 +129,7 @@ fn preserves_bm25_without_sort() {
         aggregations: vec![],
         from: 0,
         size: 10,
+        highlight: false,
     };
     let results = engine.search_request("test", &request).unwrap();
     assert_eq!(results.len(), 4);

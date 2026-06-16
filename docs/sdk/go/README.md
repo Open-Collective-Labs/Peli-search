@@ -62,11 +62,10 @@ results, err := client.Search(ctx, "products", &pelisearch.SearchRequest{
 ## Filtering
 
 ```go
-filter := "category = electronics AND price < 100"
 q := "keyboard"
 results, err := client.Search(ctx, "products", &pelisearch.SearchRequest{
-    Q:      &q,
-    Filter: &filter,
+    Q:       &q,
+    Filters: []interface{}{map[string]interface{}{"match": map[string]string{"category": "electronics"}}},
 })
 ```
 
@@ -75,10 +74,9 @@ results, err := client.Search(ctx, "products", &pelisearch.SearchRequest{
 ```go
 q := "engineer"
 results, err := client.Search(ctx, "jobs", &pelisearch.SearchRequest{
-    Q:      &q,
-    Facets: []string{"company", "location"},
+    Q: &q,
 })
-fmt.Println(results.FacetDistributions)
+fmt.Println(results.Aggregations)
 ```
 
 ## Error Handling
