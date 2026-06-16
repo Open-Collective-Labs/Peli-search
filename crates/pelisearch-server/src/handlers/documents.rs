@@ -58,7 +58,13 @@ pub struct BulkDocumentResult {
 #[serde(untagged)]
 pub enum SearchRequestBody {
     /// Legacy simple query.
-    Legacy { q: String },
+    Legacy {
+        q: String,
+        #[serde(default)]
+        from: usize,
+        #[serde(default = "default_size")]
+        size: usize,
+    },
     /// Structured query DSL.
     Dsl(Box<SearchQueryDsl>),
 }
@@ -237,14 +243,14 @@ pub async fn search(
 
 fn build_search_request(body: &SearchRequestBody) -> Result<SearchRequest, String> {
     match body {
-        SearchRequestBody::Legacy { q } => {
+        SearchRequestBody::Legacy { q, from, size } => {
             Ok(SearchRequest {
                 query: Query::Match(MatchQuery::new("", q)),
                 filters: vec![],
                 sort: vec![],
                 aggregations: vec![],
-                from: 0,
-                size: 10,
+                from: *from,
+                size: *size,
                 highlight: false,
             })
         }
