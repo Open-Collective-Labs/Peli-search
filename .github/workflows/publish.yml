@@ -5,7 +5,7 @@ on:
     tags:
       - "sdk/python-v*"
       - "sdk/rust-v*"
-      - "sdk/go/v*"
+      - "sdk/go/pelisearch/v*"
   workflow_dispatch:
     inputs:
       python:
@@ -68,7 +68,15 @@ jobs:
   go:
     if: |
       github.event_name == 'workflow_dispatch' && inputs.go
-      || startsWith(github.ref, 'refs/tags/sdk/go/v')
+      || startsWith(github.ref, 'refs/tags/sdk/go/pelisearch/v')
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Go module published by tag ${{ github.ref_name }}"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: go build ./...
+        working-directory: sdk/go/pelisearch
+      - run: go vet ./...
+        working-directory: sdk/go/pelisearch
+      - run: echo "Go module sdk/go/pelisearch tagged as ${{ github.ref_name }}"
